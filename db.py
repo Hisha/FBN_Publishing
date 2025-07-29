@@ -4,7 +4,7 @@ from datetime import datetime
 import pytz
 from dateutil import parser
 
-DB_PATH = os.path.expanduser("~/flux_api/flux_jobs.db")
+DB_PATH = os.path.expanduser("~/FBN_publishing/jobs.db")
 eastern = pytz.timezone("US/Eastern")
 
 def format_local_time(iso_str):
