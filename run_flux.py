@@ -16,16 +16,16 @@ KDP_HEIGHT = 3300  # 11 inches * 300 DPI
 def upscale_image(input_path, output_path):
     """
     Upscales an image using RealSR NCNN Vulkan.
-    Assumes realsr-ncnn-vulkan binary is installed and models are available.
-    Uses models-DF2K for general images (good for line art).
+    Assumes realsr-ncnn-vulkan binary is installed and models-DF2K exists in the binary directory.
     """
     try:
         cmd = [
             "realsr-ncnn-vulkan",
             "-i", input_path,
             "-o", output_path,
-            "-s", "4",            # 4x upscale
-            "-n", "models-DF2K"   # Use DF2K model for best general quality
+            "-s", "4",                # 4x upscale
+            "-m", "models-DF2K",      # Use DF2K model for best quality
+            "-g", "-1"                # Force CPU (avoid GPU errors if no GPU present)
         ]
         subprocess.run(cmd, check=True)
 
@@ -34,8 +34,14 @@ def upscale_image(input_path, output_path):
             return True
         else:
             return False
-    except Exception as e:
+    except FileNotFoundError:
+        print("⚠️ realsr-ncnn-vulkan not found in PATH. Skipping upscale.")
+        return False
+    except subprocess.CalledProcessError as e:
         print(f"⚠️ Upscale failed: {e}")
+        return False
+    except Exception as e:
+        print(f"⚠️ Unexpected error during upscale: {e}")
         return False
 
 def main():
@@ -169,7 +175,7 @@ def main():
     upscaled_done = False
     if not args.no_upscale:
         if not args.quiet:
-            print(f"🔍 Upscaling to KDP size using RealSR...")
+            print(f"🔍 Upscaling to KDP size using RealSR (models-DF2K)...")
         upscaled_done = upscale_image(output_path, upscaled_path)
 
     # ==========================
