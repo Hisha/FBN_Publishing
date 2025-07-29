@@ -165,7 +165,7 @@ def main():
     # ✅ Upscale if enabled
     # ==========================
     upscaled_done = False
-    if not args.no-upscale:
+    if not args.no_upscale:
         if not args.quiet:
             print(f"🔍 Upscaling to KDP size ({KDP_WIDTH}x{KDP_HEIGHT})...")
         upscaled_done = upscale_image(output_path, upscaled_path)
