@@ -3,13 +3,41 @@ import os
 import torch
 import time
 import json
+import subprocess
 from datetime import datetime
 from diffusers import DiffusionPipeline
 import multiprocessing
 import re
 
+# Target print size for KDP interior pages
+KDP_WIDTH = 2550   # 8.5 inches * 300 DPI
+KDP_HEIGHT = 3300  # 11 inches * 300 DPI
+
+def upscale_image(input_path, output_path):
+    """
+    Upscales an image to KDP specs (2550x3300) using Real-ESRGAN.
+    Assumes realesrgan-ncnn-vulkan binary is installed and available in PATH.
+    """
+    try:
+        cmd = [
+            "realesrgan-ncnn-vulkan",  # Adjust if using CPU binary (realesrgan-ncnn-vulkan or realesrgan-ncnn)
+            "-i", input_path,
+            "-o", output_path,
+            "-s", "4"  # 4x upscale
+        ]
+        subprocess.run(cmd, check=True)
+
+        # Verify file exists after upscale
+        if os.path.exists(output_path):
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(f"⚠️ Upscale failed: {e}")
+        return False
+
 def main():
-    parser = argparse.ArgumentParser(description="Run FLUX.1-schnell-Free image generation (FBN Publishing)")
+    parser = argparse.ArgumentParser(description="Run FLUX.1-schnell-Free image generation (FBN Publishing with KDP Upscale)")
 
     # Core generation options
     parser.add_argument("--prompt", type=str, required=True, help="Main subject or theme")
@@ -22,7 +50,7 @@ def main():
     # Image size and aspect
     parser.add_argument("--height", type=int, default=None, help="Image height in pixels")
     parser.add_argument("--width", type=int, default=None, help="Image width in pixels")
-    parser.add_argument("--preset", type=str, choices=["square", "portrait"], default="square",
+    parser.add_argument("--preset", type=str, choices=["square", "portrait"], default="portrait",
                         help="Aspect ratio preset: 'square' (1024x1024) or 'portrait' (8.5x11)")
 
     # Output handling
@@ -38,9 +66,10 @@ def main():
                         help="Path to local model folder")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
     parser.add_argument("--quiet", action="store_true", help="Suppress verbose logs (for automation)")
-
-    # New feature: Audience flag
     parser.add_argument("--adults", action="store_true", help="If set, generates more intricate detail for adults")
+
+    # Upscale control
+    parser.add_argument("--no-upscale", action="store_true", help="Disable upscaling to KDP print size")
 
     args = parser.parse_args()
 
@@ -69,7 +98,7 @@ def main():
         if args.width is None: args.width = 848    # Rounded to multiple of 16
 
     # ==========================
-    # ✅ Build full prompt with default template
+    # ✅ Build full prompt
     # ==========================
     base_template = (
         "black and white line art, clean bold outlines, highly detailed, "
@@ -85,23 +114,24 @@ def main():
     full_prompt = f"{args.prompt}, {base_template}{detail_tag}"
 
     # ==========================
-    # ✅ Random seed for reproducibility
+    # ✅ Random seed
     # ==========================
     if args.seed is not None:
         torch.manual_seed(args.seed)
 
     # ==========================
-    # ✅ Prepare output path
+    # ✅ Prepare output paths
     # ==========================
     output_dir = os.path.expanduser(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    if args.output:
-        output_path = os.path.join(output_dir, args.output)
-    else:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_prompt = re.sub(r'[^a-z0-9_]+', '_', args.prompt[:40].lower())
-        output_path = os.path.join(output_dir, f"{timestamp}_{safe_prompt}.png")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_prompt = re.sub(r'[^a-z0-9_]+', '_', args.prompt[:40].lower())
+    base_filename = args.output if args.output else f"{timestamp}_{safe_prompt}.png"
+    output_path = os.path.join(output_dir, base_filename)
+
+    # Upscaled path
+    upscaled_path = output_path.replace(".png", "_upscaled.png")
 
     # ==========================
     # ✅ Load model
@@ -132,11 +162,20 @@ def main():
     end = time.time()
 
     # ==========================
+    # ✅ Upscale if enabled
+    # ==========================
+    upscaled_done = False
+    if not args.no-upscale:
+        if not args.quiet:
+            print(f"🔍 Upscaling to KDP size ({KDP_WIDTH}x{KDP_HEIGHT})...")
+        upscaled_done = upscale_image(output_path, upscaled_path)
+
+    # ==========================
     # ✅ JSON output for automation
     # ==========================
     result = {
         "status": "success",
-        "file": output_path,
+        "file": upscaled_path if upscaled_done else output_path,
         "prompt": full_prompt,
         "negative_prompt": args.negative_prompt,
         "seed": args.seed,
@@ -144,6 +183,7 @@ def main():
         "guidance_scale": args.guidance_scale,
         "height": args.height,
         "width": args.width,
+        "upscaled": upscaled_done,
         "time_sec": round(end - start, 2)
     }
 
