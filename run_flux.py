@@ -12,9 +12,10 @@ def main():
     parser = argparse.ArgumentParser(description="Run FLUX.1-schnell-Free image generation (FBN Publishing)")
 
     # Core generation options
-    parser.add_argument("--prompt", type=str, required=True, help="Prompt to generate image from")
-    parser.add_argument("--negative_prompt", type=str, default="color, colored, blur, background, shading, shadow, text",
-                        help="Negative prompt to avoid unwanted features (default removes color/shading)")
+    parser.add_argument("--prompt", type=str, required=True, help="Main subject or theme")
+    parser.add_argument("--negative_prompt", type=str,
+                        default="color, colored, blur, background clutter, shading, shadow, gradients, text, watermark",
+                        help="Negative prompt to avoid unwanted features")
     parser.add_argument("--steps", type=int, default=4, help="Number of inference steps (default 4)")
     parser.add_argument("--guidance_scale", type=float, default=3.5, help="Classifier-free guidance scale")
 
@@ -36,9 +37,10 @@ def main():
     parser.add_argument("--model_path", type=str, default=os.path.expanduser("~/FBN_publishing/"),
                         help="Path to local model folder")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
-    parser.add_argument("--coloring_mode", action="store_true",
-                        help="Force coloring-book-friendly output (black and white line art)")
     parser.add_argument("--quiet", action="store_true", help="Suppress verbose logs (for automation)")
+
+    # New feature: Audience flag
+    parser.add_argument("--adults", action="store_true", help="If set, generates more intricate detail for adults")
 
     args = parser.parse_args()
 
@@ -63,14 +65,24 @@ def main():
         if args.height is None: args.height = 1024
         if args.width is None: args.width = 1024
     elif args.preset == "portrait":
-        if args.height is None: args.height = 1100
-        if args.width is None: args.width = 850
+        if args.height is None: args.height = 1088  # Rounded to multiple of 16
+        if args.width is None: args.width = 848    # Rounded to multiple of 16
 
     # ==========================
-    # ✅ Coloring mode logic
+    # ✅ Build full prompt with default template
     # ==========================
-    if args.coloring_mode:
-        args.prompt += ", black and white, clean line art, no shading, no color, high contrast, outline only"
+    base_template = (
+        "black and white line art, clean bold outlines, highly detailed, "
+        "no shading, no gradients, no color, coloring book illustration, "
+        "plain white background, high contrast, ink drawing style"
+    )
+
+    if args.adults:
+        detail_tag = ", for adults, very intricate design"
+    else:
+        detail_tag = ", for kids, simple and fun"
+
+    full_prompt = f"{args.prompt}, {base_template}{detail_tag}"
 
     # ==========================
     # ✅ Random seed for reproducibility
@@ -103,12 +115,12 @@ def main():
     pipe.enable_attention_slicing()
 
     if not args.quiet:
-        print(f"⏳ Generating image for prompt: {args.prompt}")
+        print(f"⏳ Generating image for prompt: {full_prompt}")
 
     start = time.time()
 
     image = pipe(
-        prompt=args.prompt,
+        prompt=full_prompt,
         negative_prompt=args.negative_prompt,
         num_inference_steps=args.steps,
         guidance_scale=args.guidance_scale,
@@ -125,7 +137,7 @@ def main():
     result = {
         "status": "success",
         "file": output_path,
-        "prompt": args.prompt,
+        "prompt": full_prompt,
         "negative_prompt": args.negative_prompt,
         "seed": args.seed,
         "steps": args.steps,
