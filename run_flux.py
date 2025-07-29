@@ -13,19 +13,22 @@ import re
 KDP_WIDTH = 2550   # 8.5 inches * 300 DPI
 KDP_HEIGHT = 3300  # 11 inches * 300 DPI
 
+# Absolute path to RealSR models folder
+REALSR_MODEL_PATH = "/usr/local/bin/models/models-DF2K"
+
 def upscale_image(input_path, output_path):
     """
-    Upscales an image using RealSR NCNN Vulkan.
-    Assumes realsr-ncnn-vulkan binary is installed and models-DF2K exists in the binary directory.
+    Upscales an image using RealSR NCNN Vulkan with absolute model path.
+    Assumes realsr-ncnn-vulkan binary is installed and models are in REALSR_MODEL_PATH.
     """
     try:
         cmd = [
             "realsr-ncnn-vulkan",
             "-i", input_path,
             "-o", output_path,
-            "-s", "4",                # 4x upscale
-            "-m", "models-DF2K",      # Use DF2K model for best quality
-            "-g", "-1"                # Force CPU (avoid GPU errors if no GPU present)
+            "-s", "4",                         # 4x upscale
+            "-m", REALSR_MODEL_PATH,          # Absolute model path
+            "-g", "-1"                        # Force CPU (avoid GPU errors if no GPU present)
         ]
         subprocess.run(cmd, check=True)
 
@@ -81,9 +84,7 @@ def main():
 
     args = parser.parse_args()
 
-    # ==========================
-    # ✅ Thread selection
-    # ==========================
+    # ✅ Thread tuning
     if args.autotune:
         logical_cores = multiprocessing.cpu_count()
         tuned_threads = max(4, int(logical_cores * 0.75))
@@ -95,41 +96,27 @@ def main():
         if not args.quiet:
             print(f"🧠 Using manual thread count: {args.threads}")
 
-    # ==========================
     # ✅ Handle aspect ratio presets
-    # ==========================
     if args.preset == "square":
         if args.height is None: args.height = 1024
         if args.width is None: args.width = 1024
     elif args.preset == "portrait":
-        if args.height is None: args.height = 1088  # Rounded to multiple of 16
-        if args.width is None: args.width = 848    # Rounded to multiple of 16
+        if args.height is None: args.height = 1088
+        if args.width is None: args.width = 848
 
-    # ==========================
     # ✅ Build full prompt
-    # ==========================
     base_template = (
         "black and white line art, clean bold outlines, highly detailed, "
         "no shading, no gradients, no color, coloring book illustration, "
         "plain white background, high contrast, ink drawing style"
     )
-
-    if args.adults:
-        detail_tag = ", for adults, very intricate design"
-    else:
-        detail_tag = ", for kids, simple and fun"
-
+    detail_tag = ", for adults, very intricate design" if args.adults else ", for kids, simple and fun"
     full_prompt = f"{args.prompt}, {base_template}{detail_tag}"
 
-    # ==========================
-    # ✅ Random seed
-    # ==========================
     if args.seed is not None:
         torch.manual_seed(args.seed)
 
-    # ==========================
     # ✅ Prepare output paths
-    # ==========================
     output_dir = os.path.expanduser(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -137,13 +124,9 @@ def main():
     safe_prompt = re.sub(r'[^a-z0-9_]+', '_', args.prompt[:40].lower())
     base_filename = args.output if args.output else f"{timestamp}_{safe_prompt}.png"
     output_path = os.path.join(output_dir, base_filename)
-
-    # Upscaled path
     upscaled_path = output_path.replace(".png", "_upscaled.png")
 
-    # ==========================
     # ✅ Load model
-    # ==========================
     pipe = DiffusionPipeline.from_pretrained(
         args.model_path,
         torch_dtype=torch.float32,
@@ -156,7 +139,6 @@ def main():
         print(f"⏳ Generating image for prompt: {full_prompt}")
 
     start = time.time()
-
     image = pipe(
         prompt=full_prompt,
         negative_prompt=args.negative_prompt,
@@ -165,22 +147,17 @@ def main():
         height=args.height,
         width=args.width
     ).images[0]
-
     image.save(output_path)
     end = time.time()
 
-    # ==========================
     # ✅ Upscale if enabled
-    # ==========================
     upscaled_done = False
     if not args.no_upscale:
         if not args.quiet:
-            print(f"🔍 Upscaling to KDP size using RealSR (models-DF2K)...")
+            print(f"🔍 Upscaling to KDP size using RealSR with models at {REALSR_MODEL_PATH}...")
         upscaled_done = upscale_image(output_path, upscaled_path)
 
-    # ==========================
-    # ✅ JSON output for automation
-    # ==========================
+    # ✅ JSON output
     result = {
         "status": "success",
         "file": upscaled_path if upscaled_done else output_path,
@@ -194,7 +171,6 @@ def main():
         "upscaled": upscaled_done,
         "time_sec": round(end - start, 2)
     }
-
     print(json.dumps(result))
 
 if __name__ == "__main__":
