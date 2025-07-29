@@ -1,1 +1,27 @@
+{% extends "base.html" %}
 
+{% block content %}
+<div class="space-y-6">
+  <h1 class="text-3xl font-bold mb-6">⚡ FBN Publishing Dashboard</h1>
+
+  <!-- Metrics Section -->
+  <div 
+    id="metrics-container"
+    hx-get="{{ root_path }}/partials/metrics"
+    hx-trigger="load, every 30s"
+    hx-swap="innerHTML"
+    class="bg-gray-800 p-6 rounded shadow mb-8"
+  >
+    {% include "partials/_metrics.html" %}
+  </div>
+  
+  <h2 class="text-2xl font-semibold mb-4">🖼️ Recent Jobs</h2>
+  <div 
+    id="job-container"
+    hx-get="{{ root_path }}/partials/recent_jobs"
+    hx-trigger="load, every 30s"
+    hx-swap="innerHTML"
+    class="space-y-4">
+  </div>
+</div>
+{% endblock %}
