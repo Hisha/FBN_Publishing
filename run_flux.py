@@ -15,15 +15,17 @@ KDP_HEIGHT = 3300  # 11 inches * 300 DPI
 
 def upscale_image(input_path, output_path):
     """
-    Upscales an image to KDP specs (2550x3300) using Real-ESRGAN.
-    Assumes realesrgan-ncnn-vulkan binary is installed and available in PATH.
+    Upscales an image using RealSR NCNN Vulkan.
+    Assumes realsr-ncnn-vulkan binary is installed and models are available.
+    Uses models-DF2K for general images (good for line art).
     """
     try:
         cmd = [
-            "realesrgan-ncnn-vulkan",  # Adjust if using CPU binary (realesrgan-ncnn-vulkan or realesrgan-ncnn)
+            "realsr-ncnn-vulkan",
             "-i", input_path,
             "-o", output_path,
-            "-s", "4"  # 4x upscale
+            "-s", "4",            # 4x upscale
+            "-n", "models-DF2K"   # Use DF2K model for best general quality
         ]
         subprocess.run(cmd, check=True)
 
@@ -167,7 +169,7 @@ def main():
     upscaled_done = False
     if not args.no_upscale:
         if not args.quiet:
-            print(f"🔍 Upscaling to KDP size ({KDP_WIDTH}x{KDP_HEIGHT})...")
+            print(f"🔍 Upscaling to KDP size using RealSR...")
         upscaled_done = upscale_image(output_path, upscaled_path)
 
     # ==========================
