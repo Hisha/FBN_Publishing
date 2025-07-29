@@ -9,3 +9,6 @@ pip install --upgrade pip
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 pip install diffusers transformers accelerate safetensors scipy sentencepiece protobuf
+
+#Using Real-ESRGAN for upscaling https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases
+
