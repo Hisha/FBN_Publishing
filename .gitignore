@@ -1,0 +1,23 @@
+# Virtual environment
+FBNP_env/
+
+# Model-related folders
+scheduler/
+text_encoder/
+text_encoder_2/
+tokenizer/
+tokenizer_2/
+transformer/
+vae/
+
+# Model weight files
+ae.safetensors
+flux1-schnell.safetensors
+model_index.json
+
+# Database
+*.db
+
+# Python cache
+__pycache__/
+
