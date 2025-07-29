@@ -2,49 +2,98 @@ import argparse
 import os
 import torch
 import time
+import json
 from datetime import datetime
 from diffusers import DiffusionPipeline
 import multiprocessing
+import re
 
 def main():
-    parser = argparse.ArgumentParser(description="Run FLUX.1-schnell-Free image generation")
+    parser = argparse.ArgumentParser(description="Run FLUX.1-schnell-Free image generation (FBN Publishing)")
+
+    # Core generation options
     parser.add_argument("--prompt", type=str, required=True, help="Prompt to generate image from")
-    parser.add_argument("--output", type=str, default=None, help="Output image file name")
-    parser.add_argument("--height", type=int, default=1024, help="Image height in pixels (default 1024)")
-    parser.add_argument("--width", type=int, default=1024, help="Image width in pixels (default 1024)")
+    parser.add_argument("--negative_prompt", type=str, default="color, colored, blur, background, shading, shadow, text",
+                        help="Negative prompt to avoid unwanted features (default removes color/shading)")
     parser.add_argument("--steps", type=int, default=4, help="Number of inference steps (default 4)")
     parser.add_argument("--guidance_scale", type=float, default=3.5, help="Classifier-free guidance scale")
+
+    # Image size and aspect
+    parser.add_argument("--height", type=int, default=None, help="Image height in pixels")
+    parser.add_argument("--width", type=int, default=None, help="Image width in pixels")
+    parser.add_argument("--preset", type=str, choices=["square", "portrait"], default="square",
+                        help="Aspect ratio preset: 'square' (1024x1024) or 'portrait' (8.5x11)")
+
+    # Output handling
+    parser.add_argument("--output", type=str, default=None, help="Output image filename")
+    parser.add_argument("--output_dir", type=str, default="~/FluxImages/", help="Directory to save outputs to")
+
+    # Performance options
     parser.add_argument("--threads", type=int, default=8, help="Manual thread count (ignored if --autotune is used)")
-    parser.add_argument("--autotune", action="store_true", help="Auto-select optimal thread count for this machine")
+    parser.add_argument("--autotune", action="store_true", help="Auto-select optimal thread count for CPU")
+
+    # Advanced
     parser.add_argument("--model_path", type=str, default=os.path.expanduser("~/FBN_publishing/"),
                         help="Path to local model folder")
-    parser.add_argument("--output_dir", type=str, default="~/FluxImages/", help="Directory to save outputs to")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    parser.add_argument("--coloring_mode", action="store_true",
+                        help="Force coloring-book-friendly output (black and white line art)")
+    parser.add_argument("--quiet", action="store_true", help="Suppress verbose logs (for automation)")
 
     args = parser.parse_args()
 
-    # Thread selection
+    # ==========================
+    # ✅ Thread selection
+    # ==========================
     if args.autotune:
         logical_cores = multiprocessing.cpu_count()
         tuned_threads = max(4, int(logical_cores * 0.75))
         torch.set_num_threads(tuned_threads)
-        print(f"🧠 Auto-tuned threads: {tuned_threads} of {logical_cores}")
+        if not args.quiet:
+            print(f"🧠 Auto-tuned threads: {tuned_threads} of {logical_cores}")
     else:
         torch.set_num_threads(args.threads)
-        print(f"🧠 Using manual thread count: {args.threads}")
+        if not args.quiet:
+            print(f"🧠 Using manual thread count: {args.threads}")
 
-    # Expand output dir
+    # ==========================
+    # ✅ Handle aspect ratio presets
+    # ==========================
+    if args.preset == "square":
+        if args.height is None: args.height = 1024
+        if args.width is None: args.width = 1024
+    elif args.preset == "portrait":
+        if args.height is None: args.height = 1100
+        if args.width is None: args.width = 850
+
+    # ==========================
+    # ✅ Coloring mode logic
+    # ==========================
+    if args.coloring_mode:
+        args.prompt += ", black and white, clean line art, no shading, no color, high contrast, outline only"
+
+    # ==========================
+    # ✅ Random seed for reproducibility
+    # ==========================
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+
+    # ==========================
+    # ✅ Prepare output path
+    # ==========================
     output_dir = os.path.expanduser(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    # Build output path
     if args.output:
         output_path = os.path.join(output_dir, args.output)
     else:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_prompt = args.prompt[:40].strip().replace(" ", "_").replace("/", "_").lower()
+        safe_prompt = re.sub(r'[^a-z0-9_]+', '_', args.prompt[:40].lower())
         output_path = os.path.join(output_dir, f"{timestamp}_{safe_prompt}.png")
 
-    # Load model
+    # ==========================
+    # ✅ Load model
+    # ==========================
     pipe = DiffusionPipeline.from_pretrained(
         args.model_path,
         torch_dtype=torch.float32,
@@ -53,23 +102,40 @@ def main():
     pipe.to("cpu")
     pipe.enable_attention_slicing()
 
-    print(f"⏳ Generating image for prompt: {args.prompt}")
+    if not args.quiet:
+        print(f"⏳ Generating image for prompt: {args.prompt}")
+
     start = time.time()
 
     image = pipe(
-        args.prompt,
+        prompt=args.prompt,
+        negative_prompt=args.negative_prompt,
         num_inference_steps=args.steps,
         guidance_scale=args.guidance_scale,
         height=args.height,
         width=args.width
     ).images[0]
 
+    image.save(output_path)
     end = time.time()
 
-    image.save(output_path)
-    print(f"✅ Image saved to: {output_path}")
-    print(f"🕒 Generation time: {end - start:.2f} seconds")
+    # ==========================
+    # ✅ JSON output for automation
+    # ==========================
+    result = {
+        "status": "success",
+        "file": output_path,
+        "prompt": args.prompt,
+        "negative_prompt": args.negative_prompt,
+        "seed": args.seed,
+        "steps": args.steps,
+        "guidance_scale": args.guidance_scale,
+        "height": args.height,
+        "width": args.width,
+        "time_sec": round(end - start, 2)
+    }
+
+    print(json.dumps(result))
 
 if __name__ == "__main__":
     main()
-
