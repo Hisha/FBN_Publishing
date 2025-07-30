@@ -71,6 +71,10 @@ def add_job(job_id, prompt, steps, guidance_scale, height, width, autotune,
     conn.commit()
     conn.close()
 
+
+# ==========================
+# ✅ Count Jobs by Status
+# ==========================
 def count_jobs_by_status(status: str) -> int:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -79,11 +83,13 @@ def count_jobs_by_status(status: str) -> int:
     conn.close()
     return count
 
+
 # ==========================
-# ✅ Update Job Status
+# ✅ Update Job Status (NOW supports width & height)
 # ==========================
 def update_job_status(job_id, status, start_time=None, end_time=None,
-                      error_message=None, filename=None, upscaled=None, mode=None):
+                      error_message=None, filename=None, upscaled=None, mode=None,
+                      width=None, height=None):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
@@ -108,6 +114,12 @@ def update_job_status(job_id, status, start_time=None, end_time=None,
     if mode:
         fields.append("mode = ?")
         values.append(mode)
+    if width:
+        fields.append("width = ?")
+        values.append(width)
+    if height:
+        fields.append("height = ?")
+        values.append(height)
 
     values.append(job_id)
     c.execute(f'''
@@ -303,37 +315,3 @@ def delete_queued_jobs():
     c.execute("DELETE FROM jobs WHERE status = 'queued'")
     conn.commit()
     conn.close()
-
-
-def get_job_metrics():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-
-    c.execute("SELECT COUNT(*) as total FROM jobs")
-    total = c.fetchone()["total"]
-
-    c.execute("SELECT COUNT(*) as completed FROM jobs WHERE status = 'done'")
-    done = c.fetchone()["completed"]
-
-    c.execute("SELECT COUNT(*) as failed FROM jobs WHERE status = 'failed'")
-    failed = c.fetchone()["failed"]
-
-    c.execute('''
-        SELECT AVG(strftime('%s', end_time) - strftime('%s', start_time)) as avg_duration
-        FROM jobs
-        WHERE status = 'done' AND start_time IS NOT NULL AND end_time IS NOT NULL
-    ''')
-    duration = c.fetchone()["avg_duration"]
-
-    c.execute("SELECT MAX(start_time) as last_job FROM jobs")
-    last_job = c.fetchone()["last_job"]
-
-    conn.close()
-    return {
-        "total_jobs": total,
-        "completed_jobs": done,
-        "failed_jobs": failed,
-        "average_duration_seconds": round(duration or 0, 2),
-        "most_recent_job_time": format_local_time(last_job) if last_job else "N/A"
-    }
