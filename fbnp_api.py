@@ -409,10 +409,17 @@ def admin_delete(request: Request, job_id: str):
     filename = delete_job(job_id)
     if not filename:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Delete file from disk if exists
     path = os.path.join(OUTPUT_DIR, filename)
     if os.path.exists(path):
-        os.remove(path)
-    return RedirectResponse(url=f"{request.scope.get('root_path', '')}/admin", status_code=303)
+        try:
+            os.remove(path)
+        except Exception as e:
+            print(f"⚠️ Failed to delete file {path}: {e}")
+
+    # ✅ Redirect back to jobs list
+    return RedirectResponse(url="/jobs", status_code=303)
 
 @app.post("/clear_queue")
 def clear_queue_api(auth=Depends(require_token)):
