@@ -22,10 +22,10 @@ RUN_FLUX_SCRIPT = "/home/smithkt/FBN_publishing/run_flux.py"
 def add_job_to_db_and_queue(params):
     job_id = uuid.uuid4().hex[:8]
 
-    # Internal filename (auto-generated if not provided)
+    # Always generate internal filename
     internal_filename = f"{job_id}.png"
 
-    # Optional custom filename for final copy
+    # Sanitize optional custom filename
     requested_filename = params.get("filename")
     custom_filename = None
     if requested_filename:
@@ -33,13 +33,13 @@ def add_job_to_db_and_queue(params):
         if not custom_filename.lower().endswith(".png"):
             custom_filename += ".png"
 
-    # Handle optional output_dir
+    # Handle output_dir if provided
     output_dir = params.get("output_dir")
     if output_dir:
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
         os.makedirs(output_dir, exist_ok=True)
 
-    # Insert job into DB
+    # Insert into DB
     add_job(
         job_id=job_id,
         prompt=params["prompt"],
@@ -90,6 +90,7 @@ def run_worker():
                 "--width", str(job["width"])
             ]
 
+            # Apply flags based on job properties
             if job.get("autotune"):
                 cmd.append("--autotune")
             if job.get("adults"):
@@ -98,6 +99,8 @@ def run_worker():
                 cmd.append("--cover_mode")
             if job.get("seed"):
                 cmd.extend(["--seed", str(job["seed"])])
+
+            print(f"▶ Running command: {' '.join(cmd)}")
 
             # Execute run_flux.py and capture output
             process = subprocess.run(cmd, capture_output=True, text=True)
@@ -110,7 +113,7 @@ def run_worker():
                 )
                 continue
 
-            # Parse JSON result from stdout
+            # Parse JSON output from run_flux.py
             try:
                 result = json.loads(process.stdout.strip())
             except json.JSONDecodeError:
@@ -131,11 +134,11 @@ def run_worker():
                 )
                 continue
 
-            # Get generated file info
+            # Capture key details
             final_path = result.get("file")
             final_filename = os.path.basename(final_path)
             upscaled = result.get("upscaled", False)
-            mode = result.get("mode", "coloring")
+            mode = "cover" if job.get("cover_mode") else "coloring"
 
             # Update DB
             update_job_status(
@@ -147,7 +150,7 @@ def run_worker():
                 mode=mode
             )
 
-            # Handle copy logic for custom filename/output_dir
+            # Copy to custom output_dir if specified
             try:
                 dest_dir = job.get("output_dir")
                 if dest_dir:
@@ -165,6 +168,6 @@ def run_worker():
         except Exception as e:
             update_job_status(job_id, "failed", end_time=datetime.utcnow().isoformat(), error_message=str(e))
 
-# Init DB
+# Initialize DB at startup
 init_db()
 print("✅ Job queue initialized.")
