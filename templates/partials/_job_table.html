@@ -1,0 +1,47 @@
+<div id="job-container" class="space-y-6">
+  {% for job in jobs %}
+    <div class="bg-gray-800 p-4 rounded shadow-md border border-gray-700">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-lg font-semibold text-white">{{ job.prompt }}</h2>
+        <span class="text-sm px-2 py-1 rounded text-white 
+          {% if job.status == 'done' %}bg-green-700
+          {% elif job.status == 'failed' %}bg-red-700
+          {% elif job.status == 'queued' %}bg-yellow-700
+          {% elif job.status in ['processing', 'in_progress'] %}bg-blue-700
+          {% else %}bg-gray-700{% endif %}">
+          {{ job.status }}
+        </span>
+      </div>
+      <div class="text-sm text-gray-400 mb-2">
+        <strong>Job ID:</strong> {{ job.job_id }}<br>
+        <strong>Created:</strong> {{ job.start_time | localtime }}<br>
+        <strong>Filename:</strong> {{ job.filename or "N/A" }}
+      </div>
+
+      {% if job.status == "done" and job.filename %}
+        <div class="mt-4">
+          <h3 class="text-md font-semibold mb-2">Generated Image</h3>
+          <img src="{{ root_path }}/images/{{ job.filename }}" class="rounded border border-gray-700 max-w-full">
+        </div>
+      {% endif %}
+
+      {% if job.status == "failed" and job.error_message %}
+        <div class="mt-2 text-red-400 text-sm">
+          <strong>Error:</strong> {{ job.error_message }}
+        </div>
+      {% endif %}
+
+      <div class="mt-4 flex gap-4">
+        {% if job.status == "failed" %}
+          <form method="POST" action="{{ root_path }}/jobs/{{ job.job_id }}/retry">
+            <button type="submit" class="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-white text-sm">Retry</button>
+          </form>
+        {% endif %}
+        <form method="POST" action="{{ root_path }}/admin/delete/{{ job.job_id }}">
+          <button type="submit" class="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-white text-sm">Delete</button>
+        </form>
+        <a href="{{ root_path }}/job/{{ job.job_id }}" class="ml-auto text-blue-400 underline text-sm">View Details</a>
+      </div>
+    </div>
+  {% endfor %}
+</div>
