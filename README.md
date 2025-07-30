@@ -12,4 +12,4 @@ pip install diffusers transformers accelerate safetensors scipy sentencepiece pr
 
 #Using Real-ESRGAN for upscaling https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases
 
-pip install pytz
+pip install pytz FastAPI dotenv itsdangerous bcrypt 
