@@ -28,7 +28,7 @@ def upscale_image(input_path, output_path):
             "-o", output_path,
             "-s", "4",                         # 4x upscale
             "-m", REALSR_MODEL_PATH,          # Absolute model path
-            "-g", "-1"                        # Force CPU (avoid GPU errors if no GPU present)
+            "-g", "-1"                        # Force CPU
         ]
         subprocess.run(cmd, check=True)
         return os.path.exists(output_path)
@@ -43,66 +43,66 @@ def upscale_image(input_path, output_path):
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description="Run FLUX.1-schnell-Free image generation (FBN Publishing with KDP Upscale)")
+    parser = argparse.ArgumentParser(description="FBN Publishing image generator (Flux Schnell + RealSR)")
 
-    # Core generation options
+    # Core options
     parser.add_argument("--prompt", type=str, required=True, help="Main subject or theme")
     parser.add_argument("--negative_prompt", type=str,
-                        default="color, colored, blur, background clutter, shading, shadow, gradients, text, watermark, trademarked, copyrighted",
+                        default="blur, background clutter, text, watermark, trademarked, copyrighted",
                         help="Negative prompt to avoid unwanted features")
-    parser.add_argument("--steps", type=int, default=4, help="Number of inference steps (default 4)")
+    parser.add_argument("--steps", type=int, default=4, help="Number of inference steps")
     parser.add_argument("--guidance_scale", type=float, default=3.5, help="Classifier-free guidance scale")
 
-    # Image size and aspect
-    parser.add_argument("--height", type=int, default=None, help="Image height in pixels")
-    parser.add_argument("--width", type=int, default=None, help="Image width in pixels")
+    # Image size
+    parser.add_argument("--height", type=int, default=None, help="Image height in px")
+    parser.add_argument("--width", type=int, default=None, help="Image width in px")
     parser.add_argument("--preset", type=str, choices=["square", "portrait"], default="portrait",
-                        help="Aspect ratio preset: 'square' (1024x1024) or 'portrait' (8.5x11)")
+                        help="Aspect ratio preset: 'square' or 'portrait'")
 
-    # Output handling
-    parser.add_argument("--output", type=str, default=None, help="Output image filename")
-    parser.add_argument("--output_dir", type=str, default="~/FluxImages/", help="Directory to save outputs to")
+    # Output
+    parser.add_argument("--output", type=str, default=None, help="Output filename")
+    parser.add_argument("--output_dir", type=str, default="~/FluxImages/", help="Directory for saving")
 
-    # Performance options
-    parser.add_argument("--threads", type=int, default=8, help="Manual thread count (ignored if --autotune is used)")
-    parser.add_argument("--autotune", action="store_true", help="Auto-select optimal thread count for CPU")
+    # Performance
+    parser.add_argument("--threads", type=int, default=8, help="Manual thread count")
+    parser.add_argument("--autotune", action="store_true", help="Auto-select optimal thread count")
 
-    # Advanced
+    # Advanced flags
     parser.add_argument("--model_path", type=str, default=os.path.expanduser("~/FBN_publishing/"),
                         help="Path to local model folder")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
-    parser.add_argument("--quiet", action="store_true", help="Suppress verbose logs (for automation)")
-    parser.add_argument("--adults", action="store_true", help="If set, generates more intricate detail for adults")
-    parser.add_argument("--cover_mode", action="store_true", help="Generate full-color cover art without coloring template")
+    parser.add_argument("--quiet", action="store_true", help="Suppress verbose logs")
+    parser.add_argument("--adults", action="store_true", help="Intricate design for adults")
+    parser.add_argument("--cover_mode", action="store_true", help="Enable full-color cover art mode")
 
-    # Upscale control
-    parser.add_argument("--no-upscale", action="store_true", help="Disable upscaling to KDP print size")
+    # Upscale toggle
+    parser.add_argument("--no-upscale", action="store_true", help="Disable KDP upscaling")
 
     args = parser.parse_args()
 
-    # ✅ Thread tuning
+    # ✅ Threads
     if args.autotune:
         logical_cores = multiprocessing.cpu_count()
         tuned_threads = max(4, int(logical_cores * 0.75))
         torch.set_num_threads(tuned_threads)
         if not args.quiet:
-            print(f"🧠 Auto-tuned threads: {tuned_threads} of {logical_cores}")
+            print(f"🧠 Auto-tuned threads: {tuned_threads}/{logical_cores}")
     else:
         torch.set_num_threads(args.threads)
         if not args.quiet:
             print(f"🧠 Using manual thread count: {args.threads}")
 
-    # ✅ Handle aspect ratio presets
+    # ✅ Aspect ratio
     if args.preset == "square":
-        if args.height is None: args.height = 1024
-        if args.width is None: args.width = 1024
+        args.height = args.height or 1024
+        args.width = args.width or 1024
     elif args.preset == "portrait":
-        if args.height is None: args.height = 1088
-        if args.width is None: args.width = 848
+        args.height = args.height or 1088
+        args.width = args.width or 848
 
-    # ✅ Build prompt based on mode
+    # ✅ Build prompt logic
     if args.cover_mode:
-        full_prompt = args.prompt
+        full_prompt = args.prompt  # Full color cover, no restrictions
     else:
         base_template = (
             "black and white line art, clean bold outlines, highly detailed, "
@@ -112,13 +112,16 @@ def main():
         detail_tag = ", for adults, very intricate design" if args.adults else ", for kids, simple and fun"
         full_prompt = f"{args.prompt}, {base_template}{detail_tag}"
 
+        # Add strong negatives to prevent accidental color in coloring pages
+        args.negative_prompt += ", color, colored, gradients"
+
+    # ✅ Seed
     if args.seed is not None:
         torch.manual_seed(args.seed)
 
-    # ✅ Prepare output paths
+    # ✅ Output paths
     output_dir = os.path.expanduser(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
-
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_prompt = re.sub(r'[^a-z0-9_]+', '_', args.prompt[:40].lower())
     base_filename = args.output if args.output else f"{timestamp}_{safe_prompt}.png"
@@ -153,10 +156,10 @@ def main():
     upscaled_done = False
     if not args.no_upscale:
         if not args.quiet:
-            print(f"🔍 Upscaling to KDP size using RealSR with models at {REALSR_MODEL_PATH}...")
+            print(f"🔍 Upscaling to KDP size using RealSR (models: {REALSR_MODEL_PATH})...")
         upscaled_done = upscale_image(output_path, upscaled_path)
 
-    # ✅ JSON output
+    # ✅ Build JSON result
     result = {
         "status": "success",
         "file": upscaled_path if upscaled_done else output_path,
@@ -171,6 +174,7 @@ def main():
         "mode": "cover" if args.cover_mode else "coloring",
         "time_sec": round(end - start, 2)
     }
+
     print(json.dumps(result))
 
 if __name__ == "__main__":
