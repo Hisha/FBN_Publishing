@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, Form, status, Header
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from auth import verify_password, require_login, is_authenticated
