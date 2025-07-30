@@ -11,10 +11,16 @@
       <p><strong>Steps:</strong> {{ job.steps }}</p>
       <p><strong>Guidance Scale:</strong> {{ job.guidance_scale }}</p>
       <p><strong>Resolution:</strong> {{ job.width }} x {{ job.height }}</p>
-      <p><strong>Autotune:</strong> {{ "Yes" if job.autotune|int else "No" }}</p>
+      <p><strong>Upscaled:</strong> {{ "Yes" if job.upscaled else "No" }}</p>
+      <p><strong>Autotune:</strong> {{ "Yes" if job.autotune else "No" }}</p>
+      <p><strong>Adults Mode:</strong> {{ "Yes" if job.adults else "No" }}</p>
+      <p><strong>Cover Mode:</strong> {{ "Yes" if job.cover_mode else "No" }}</p>
+      <p><strong>Seed:</strong> {{ job.seed if job.seed else "Random" }}</p>
+      <p><strong>Output Dir:</strong> {{ job.output_dir or "Default (~/FluxImages)" }}</p>
+      <p><strong>Filename:</strong> {{ job.filename or "N/A" }}</p>
+      <p><strong>Mode:</strong> {{ job.mode or "N/A" }}</p>
       <p><strong>Start Time:</strong> {{ job.start_time | localtime }}</p>
       <p><strong>End Time:</strong> {{ job.end_time | localtime }}</p>
-      <p><strong>Filename:</strong> {{ job.filename or "N/A" }}</p>
     </div>
     <div class="mt-6">  
       <h2 class="text-xl font-semibold mb-2">🖼️ Generated Image</h2>
