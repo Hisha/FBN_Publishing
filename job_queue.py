@@ -87,7 +87,8 @@ def run_worker():
                 "--steps", str(job["steps"]),
                 "--guidance_scale", str(job["guidance_scale"]),
                 "--height", str(job["height"]),
-                "--width", str(job["width"])
+                "--width", str(job["width"]),
+                "--quiet"  # ensure only JSON is printed
             ]
 
             # Apply flags based on job properties
@@ -104,25 +105,34 @@ def run_worker():
 
             # Execute run_flux.py and capture output
             process = subprocess.run(cmd, capture_output=True, text=True)
+            stdout, stderr = process.stdout.strip(), process.stderr.strip()
+
             if process.returncode != 0:
                 update_job_status(
                     job_id,
                     "failed",
                     end_time=datetime.utcnow().isoformat(),
-                    error_message=process.stderr or "Unknown error"
+                    error_message=stderr or "Unknown error"
                 )
+                print(f"❌ Process failed: {stderr}")
                 continue
 
-            # Parse JSON output from run_flux.py
+            # ✅ Extract JSON from stdout (ignore other logs if present)
             try:
-                result = json.loads(process.stdout.strip())
-            except json.JSONDecodeError:
+                json_match = re.search(r"\{.*\}", stdout, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                else:
+                    raise ValueError("No JSON found in output")
+            except Exception as e:
                 update_job_status(
                     job_id,
                     "failed",
                     end_time=datetime.utcnow().isoformat(),
-                    error_message="Invalid JSON output from run_flux.py"
+                    error_message=f"Invalid JSON output from run_flux.py: {str(e)}"
                 )
+                print(f"⚠️ STDOUT:\n{stdout}")
+                print(f"⚠️ STDERR:\n{stderr}")
                 continue
 
             if result.get("status") != "success":
