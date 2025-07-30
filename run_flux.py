@@ -48,7 +48,7 @@ def main():
     # Core generation options
     parser.add_argument("--prompt", type=str, required=True, help="Main subject or theme")
     parser.add_argument("--negative_prompt", type=str,
-                        default="color, colored, blur, background clutter, shading, shadow, gradients, text, watermark",
+                        default="color, colored, blur, background clutter, shading, shadow, gradients, text, watermark, trademarked, copyrighted",
                         help="Negative prompt to avoid unwanted features")
     parser.add_argument("--steps", type=int, default=4, help="Number of inference steps (default 4)")
     parser.add_argument("--guidance_scale", type=float, default=3.5, help="Classifier-free guidance scale")
