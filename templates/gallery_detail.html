@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1 class="text-3xl font-bold mb-6">📝 Gallery Details</h1>
+
+  <div class="bg-gray-800 border border-gray-700 rounded p-6">
+    <div class="mb-4">
+      <p><strong>Prompt:</strong> {{ job.prompt }}</p>
+      <p><strong>Status:</strong> {{ job.status }}</p>
+      <p><strong>Job ID:</strong> {{ job.job_id }}</p>
+      <p><strong>Steps:</strong> {{ job.steps }}</p>
+      <p><strong>Guidance Scale:</strong> {{ job.guidance_scale }}</p>
+      <p><strong>Resolution:</strong> {{ job.width }} x {{ job.height }}</p>
+      <p><strong>Autotune:</strong> {{ "Yes" if job.autotune|int else "No" }}</p>
+      <p><strong>Start Time:</strong> {{ job.start_time | localtime }}</p>
+      <p><strong>End Time:</strong> {{ job.end_time | localtime }}</p>
+      <p><strong>Filename:</strong> {{ job.filename or "N/A" }}</p>
+    </div>
+    <div class="mt-6">  
+      <h2 class="text-xl font-semibold mb-2">🖼️ Generated Image</h2>
+      <img src="{{ request.scope.root_path }}/images/{{ job.filename }}" alt="Generated Image" class="border border-gray-600 rounded max-w-full">
+    </div>
+    <div class="mt-6 flex gap-4">
+      <a href="{{ request.scope.root_path }}/gallery" class="ml-auto text-blue-400 underline text-sm mt-2">← Back to Gallery</a>
+    </div>
+  </div>
+{% endblock %}
