@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <title>FBN Publishing</title>
+  {% block head %}
+  {% endblock %}
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script>
+    htmx.on("htmx:afterRequest", function(evt) {
+      console.log("HTMX triggered refresh from:", evt.detail.pathInfo.requestPath);
+    });
+
+    htmx.on("htmx:beforeSwap", function(evt) {
+      console.log("HTMX is swapping in new content.");
+    });
+  </script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-gradient-to-r from-indigo-800 via-purple-800 to-gray-800 p-4 shadow-md">
+    <h1 class="text-2xl font-bold text-center tracking-wide">⚡ FBN Publishing Dashboard</h1>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="bg-gray-800 text-gray-200 px-6 py-3 shadow">
+    <div class="max-w-6xl mx-auto flex space-x-6">
+      <a href="{{ request.scope.root_path }}/" class="hover:underline">Home</a>
+      <a href="{{ request.scope.root_path }}/jobs" class="hover:underline">Jobs</a>
+      <a href="{{ request.scope.root_path }}/gallery" class="hover:underline">Gallery</a>
+      <a href="{{ request.scope.root_path }}/admin" class="hover:underline">Admin</a>
+      <a href="/chat/" class="hover:underline">Deepseek Chat</a>
+      <a href="/flux/" class="hover:underline">Flux Box</a>
+      <a href="{{ root_path }}/logout" class="hover:underline ml-auto">Logout</a>
+    </div>
+  </nav>
+
+  <!-- Page Content -->
+  <main class="p-6 w-full max-w-screen-xl mx-auto">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+<footer class="bg-gray-800 text-gray-400 text-sm mt-12 py-6">
+  <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center">
+    <div class="mb-2 sm:mb-0">
+      &copy; {{ now().year }} Fantasy Broadcast Network. All rights reserved.
+    </div>
+    <div class="space-x-4">
+      <a href="{{ request.scope.root_path }}/terms" class="hover:underline">Terms</a>
+      <a href="{{ request.scope.root_path }}/privacy" class="hover:underline">Privacy</a>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
