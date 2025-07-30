@@ -31,12 +31,7 @@ def upscale_image(input_path, output_path):
             "-g", "-1"                        # Force CPU (avoid GPU errors if no GPU present)
         ]
         subprocess.run(cmd, check=True)
-
-        # Verify file exists after upscale
-        if os.path.exists(output_path):
-            return True
-        else:
-            return False
+        return os.path.exists(output_path)
     except FileNotFoundError:
         print("⚠️ realsr-ncnn-vulkan not found in PATH. Skipping upscale.")
         return False
@@ -78,6 +73,7 @@ def main():
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
     parser.add_argument("--quiet", action="store_true", help="Suppress verbose logs (for automation)")
     parser.add_argument("--adults", action="store_true", help="If set, generates more intricate detail for adults")
+    parser.add_argument("--cover_mode", action="store_true", help="Generate full-color cover art without coloring template")
 
     # Upscale control
     parser.add_argument("--no-upscale", action="store_true", help="Disable upscaling to KDP print size")
@@ -104,14 +100,17 @@ def main():
         if args.height is None: args.height = 1088
         if args.width is None: args.width = 848
 
-    # ✅ Build full prompt
-    base_template = (
-        "black and white line art, clean bold outlines, highly detailed, "
-        "no shading, no gradients, no color, coloring book illustration, "
-        "plain white background, high contrast, ink drawing style"
-    )
-    detail_tag = ", for adults, very intricate design" if args.adults else ", for kids, simple and fun"
-    full_prompt = f"{args.prompt}, {base_template}{detail_tag}"
+    # ✅ Build prompt based on mode
+    if args.cover_mode:
+        full_prompt = args.prompt
+    else:
+        base_template = (
+            "black and white line art, clean bold outlines, highly detailed, "
+            "no shading, no gradients, no color, coloring book illustration, "
+            "plain white background, high contrast, ink drawing style"
+        )
+        detail_tag = ", for adults, very intricate design" if args.adults else ", for kids, simple and fun"
+        full_prompt = f"{args.prompt}, {base_template}{detail_tag}"
 
     if args.seed is not None:
         torch.manual_seed(args.seed)
@@ -169,6 +168,7 @@ def main():
         "height": args.height,
         "width": args.width,
         "upscaled": upscaled_done,
+        "mode": "cover" if args.cover_mode else "coloring",
         "time_sec": round(end - start, 2)
     }
     print(json.dumps(result))
