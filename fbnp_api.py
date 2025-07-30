@@ -415,38 +415,43 @@ def generate_from_form(
     prompt: str = Form(...),
     steps: int = Form(4),
     guidance_scale: float = Form(3.5),
-    height: int = Form(1088),  # Default KDP portrait
+    height: int = Form(1088),
     width: int = Form(848),
     filename: Optional[str] = Form(None),
     output_dir: Optional[str] = Form(None),
     seed: Optional[int] = Form(None),
-    adults: Optional[str] = Form(None),       # Checkbox
-    cover_mode: Optional[str] = Form(None)    # Checkbox
+    adults: Optional[str] = Form(None),       # Will be "on" if checked
+    cover_mode: Optional[str] = Form(None)    # Will be "on" if checked
 ):
     require_login(request)
 
-    # ✅ Normalize checkbox values
+    # ✅ Normalize checkboxes
     adults_flag = adults == "on"
     cover_mode_flag = cover_mode == "on"
 
+    # ✅ Add job to queue
     job_info = add_job_to_db_and_queue({
-        "prompt": prompt,
+        "prompt": prompt.strip(),
         "steps": steps,
         "guidance_scale": guidance_scale,
         "height": height,
         "width": width,
         "filename": filename,
         "output_dir": output_dir,
-        "autotune": True,  # Always on for FBN Publishing
+        "autotune": True,
         "adults": adults_flag,
         "cover_mode": cover_mode_flag,
         "seed": seed
     })
 
-    return RedirectResponse(
-        url=f"{request.scope.get('root_path', '')}/job/{job_info['job_id']}",
-        status_code=303
-    )
+    # ✅ HTMX partial feedback: Replace button area with success message
+    return HTMLResponse(f"""
+    <div class='p-4 bg-green-800 text-white rounded'>
+        ✅ Job <strong>{job_info['job_id']}</strong> added successfully!
+        <a href='{request.scope.get('root_path', '')}/job/{job_info['job_id']}' class='underline'>View Job</a>
+    </div>
+    """)
+
 
 @app.post("/generate/json")
 def generate_from_json(payload: PromptRequest, request: Request, auth=Depends(require_token)):
