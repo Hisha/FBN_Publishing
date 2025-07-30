@@ -428,11 +428,14 @@ def generate_from_form(
     width: int = Form(848),
     filename: Optional[str] = Form(None),
     output_dir: Optional[str] = Form(None),
-    seed: Optional[int] = Form(None),
+    seed: Optional[str] = Form(None),  # ✅ Accept as string first
     adults: Optional[str] = Form(None),
     cover_mode: Optional[str] = Form(None)
 ):
     require_login(request)
+
+    # ✅ Convert seed if provided
+    seed_val = int(seed) if seed and seed.strip().isdigit() else None
 
     adults_flag = adults == "on"
     cover_mode_flag = cover_mode == "on"
@@ -448,7 +451,7 @@ def generate_from_form(
         "autotune": True,
         "adults": adults_flag,
         "cover_mode": cover_mode_flag,
-        "seed": seed
+        "seed": seed_val
     })
 
     logger.info(f"New job created from form: {job_info['job_id']} ({prompt})")
