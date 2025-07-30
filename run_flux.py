@@ -4,6 +4,7 @@ import torch
 import time
 import json
 import subprocess
+import shutil
 from datetime import datetime
 from diffusers import DiffusionPipeline
 import multiprocessing
@@ -153,16 +154,28 @@ def main():
     end = time.time()
 
     # ✅ Upscale if enabled
+    final_output_path = output_path
     upscaled_done = False
+
     if not args.no_upscale:
         if not args.quiet:
-            print(f"🔍 Upscaling to KDP size using RealSR (models: {REALSR_MODEL_PATH})...")
-        upscaled_done = upscale_image(output_path, upscaled_path)
+            print(f"🔍 Upscaling to KDP size using RealSR...")
+        if upscale_image(output_path, upscaled_path):
+            try:
+                os.remove(output_path)  # delete original
+                shutil.move(upscaled_path, output_path)  # rename upscaled
+                upscaled_done = True
+                final_output_path = output_path
+            except Exception as e:
+                print(f"⚠️ Failed to replace original with upscaled: {e}")
+        else:
+            if not args.quiet:
+                print("⚠️ Upscale failed, keeping original image.")
 
     # ✅ Build JSON result
     result = {
         "status": "success",
-        "file": upscaled_path if upscaled_done else output_path,
+        "file": final_output_path,
         "prompt": full_prompt,
         "negative_prompt": args.negative_prompt,
         "seed": args.seed,
