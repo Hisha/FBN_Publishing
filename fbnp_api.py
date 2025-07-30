@@ -40,9 +40,12 @@ class PromptRequest(BaseModel):
     prompt: str
     steps: int = 4
     guidance_scale: float = 3.5
-    height: int = 1024
-    width: int = 1024
+    height: int = 1088  # Default for portrait (KDP)
+    width: int = 848    # Default for portrait (KDP)
     autotune: bool = True
+    adults: bool = False          # For detailed adult coloring pages
+    cover_mode: bool = False      # For cover generation (color allowed)
+    seed: Optional[int] = None    # Optional for reproducibility
     filename: Optional[str] = None  # Optional custom filename
     output_dir: Optional[str] = None
 
