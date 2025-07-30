@@ -19,10 +19,11 @@ OUTPUT_DIR = os.path.expanduser("~/FluxImages")
 PYTHON_BIN = "/home/smithkt/FBN_publishing/FBNP_env/bin/python"
 RUN_FLUX_SCRIPT = "/home/smithkt/FBN_publishing/run_flux.py"
 
+
 def add_job_to_db_and_queue(params):
     job_id = uuid.uuid4().hex[:8]
 
-    # Always generate internal filename
+    # Always generate internal filename for initial reference
     internal_filename = f"{job_id}.png"
 
     # Sanitize optional custom filename
@@ -33,13 +34,13 @@ def add_job_to_db_and_queue(params):
         if not custom_filename.lower().endswith(".png"):
             custom_filename += ".png"
 
-    # Handle output_dir if provided
+    # Handle optional output_dir
     output_dir = params.get("output_dir")
     if output_dir:
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
         os.makedirs(output_dir, exist_ok=True)
 
-    # Insert into DB
+    # Insert job into DB
     add_job(
         job_id=job_id,
         prompt=params["prompt"],
@@ -63,8 +64,10 @@ def add_job_to_db_and_queue(params):
         "custom_filename": custom_filename
     }
 
+
 def clear_queue():
     delete_queued_jobs()
+
 
 def run_worker():
     while True:
@@ -91,7 +94,7 @@ def run_worker():
                 "--quiet"  # ensure only JSON is printed
             ]
 
-            # Apply flags based on job properties
+            # Apply flags
             if job.get("autotune"):
                 cmd.append("--autotune")
             if job.get("adults"):
@@ -103,10 +106,10 @@ def run_worker():
 
             print(f"▶ Running command: {' '.join(cmd)}")
 
-            # Execute run_flux.py and capture output
             process = subprocess.run(cmd, capture_output=True, text=True)
             stdout, stderr = process.stdout.strip(), process.stderr.strip()
 
+            # Handle non-zero exit
             if process.returncode != 0:
                 update_job_status(
                     job_id,
@@ -117,7 +120,7 @@ def run_worker():
                 print(f"❌ Process failed: {stderr}")
                 continue
 
-            # ✅ Extract JSON from stdout (ignore other logs if present)
+            # ✅ Extract JSON from stdout (ignore logs if any)
             try:
                 json_match = re.search(r"\{.*\}", stdout, re.DOTALL)
                 if json_match:
@@ -129,12 +132,13 @@ def run_worker():
                     job_id,
                     "failed",
                     end_time=datetime.utcnow().isoformat(),
-                    error_message=f"Invalid JSON output from run_flux.py: {str(e)}"
+                    error_message=f"Invalid JSON output: {str(e)}"
                 )
                 print(f"⚠️ STDOUT:\n{stdout}")
                 print(f"⚠️ STDERR:\n{stderr}")
                 continue
 
+            # Validate success
             if result.get("status") != "success":
                 update_job_status(
                     job_id,
@@ -144,7 +148,7 @@ def run_worker():
                 )
                 continue
 
-            # Capture key details
+            # ✅ Use the final file from JSON
             final_path = result.get("file")
             final_filename = os.path.basename(final_path)
             upscaled = result.get("upscaled", False)
@@ -160,16 +164,13 @@ def run_worker():
                 mode=mode
             )
 
-            # Copy to custom output_dir if specified
+            # ✅ If custom output_dir is provided, copy the final image
             try:
                 dest_dir = job.get("output_dir")
                 if dest_dir:
                     os.makedirs(dest_dir, exist_ok=True)
                     custom_filename = job.get("custom_filename")
-                    if custom_filename:
-                        dest_path = os.path.join(dest_dir, custom_filename)
-                    else:
-                        dest_path = os.path.join(dest_dir, final_filename)
+                    dest_path = os.path.join(dest_dir, custom_filename or final_filename)
                     shutil.copy2(final_path, dest_path)
                     print(f"✅ Copied file to: {dest_path}")
             except Exception as copy_err:
@@ -178,6 +179,7 @@ def run_worker():
         except Exception as e:
             update_job_status(job_id, "failed", end_time=datetime.utcnow().isoformat(), error_message=str(e))
 
-# Initialize DB at startup
+
+# Initialize DB
 init_db()
 print("✅ Job queue initialized.")
