@@ -415,19 +415,19 @@ def generate_from_form(
     prompt: str = Form(...),
     steps: int = Form(4),
     guidance_scale: float = Form(3.5),
-    height: int = Form(1088),
+    height: int = Form(1088),  # Default KDP portrait
     width: int = Form(848),
     filename: Optional[str] = Form(None),
     output_dir: Optional[str] = Form(None),
-    adults: Optional[bool] = Form(False),
-    cover_mode: Optional[bool] = Form(False),
-    seed: Optional[int] = Form(None)
+    seed: Optional[int] = Form(None),
+    adults: Optional[str] = Form(None),       # Checkbox
+    cover_mode: Optional[str] = Form(None)    # Checkbox
 ):
     require_login(request)
 
-    # Normalize checkbox values (if HTML sends "on")
-    adults = True if adults else False
-    cover_mode = True if cover_mode else False
+    # ✅ Normalize checkbox values
+    adults_flag = adults == "on"
+    cover_mode_flag = cover_mode == "on"
 
     job_info = add_job_to_db_and_queue({
         "prompt": prompt,
@@ -437,9 +437,9 @@ def generate_from_form(
         "width": width,
         "filename": filename,
         "output_dir": output_dir,
-        "autotune": True,
-        "adults": adults,
-        "cover_mode": cover_mode,
+        "autotune": True,  # Always on for FBN Publishing
+        "adults": adults_flag,
+        "cover_mode": cover_mode_flag,
         "seed": seed
     })
 
