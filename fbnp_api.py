@@ -241,6 +241,7 @@ async def job_dashboard(
     status: str = Query("all"),
     q: str = Query("")
 ):
+    require_login(request)
     jobs = get_recent_jobs(status=status)
     if q:
         jobs = [j for j in jobs if q.lower() in j["prompt"].lower()]
