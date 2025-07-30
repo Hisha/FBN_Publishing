@@ -6,41 +6,78 @@
 <!-- Prompt Submission Form -->
 <form 
   id="generateForm"
-  class="mb-6 flex gap-2"
+  class="mb-6 flex flex-col gap-4 p-4 bg-gray-900 rounded-lg shadow"
   hx-post="{{ root_path }}/generate"
   hx-target="#job-container"
   hx-swap="none"
   hx-on::after-request="this.reset(); htmx.trigger('#job-container', 'refresh')"
 >
-  <textarea id="promptInput" name="prompt" placeholder="Enter prompt..." 
-    class="w-full p-2 bg-gray-800 border border-gray-600 rounded text-white resize-y leading-tight"
-    rows="4"></textarea>
+  <!-- Prompt Input -->
+  <div>
+    <label for="promptInput" class="block text-white font-semibold mb-2">Image Prompt</label>
+    <textarea id="promptInput" name="prompt" placeholder="Describe the scene (e.g., mystical forest with glowing mushrooms)..."
+      class="w-full p-3 bg-gray-800 border border-gray-600 rounded text-white resize-y leading-tight"
+      rows="4" required></textarea>
+  </div>
 
-  <!-- Exposed flags -->
+  <!-- Core Parameters -->
   <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm text-white">
     <div>
       <label for="steps" class="block font-medium">Steps</label>
-      <input type="number" name="steps" id="steps" min="1" max="20" value="4" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+      <input type="number" name="steps" id="steps" min="1" max="20" value="4"
+        class="w-full p-2 bg-gray-800 rounded border border-gray-700">
     </div>
     <div>
       <label for="guidance_scale" class="block font-medium">Guidance Scale</label>
-      <input type="number" name="guidance_scale" id="guidance_scale" step="0.1" min="1" max="10" value="3.5" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+      <input type="number" name="guidance_scale" id="guidance_scale" step="0.1" min="1" max="10" value="3.5"
+        class="w-full p-2 bg-gray-800 rounded border border-gray-700">
     </div>
     <div>
       <label for="height" class="block font-medium">Height (px)</label>
-      <input type="number" name="height" id="height" value="1024" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+      <input type="number" name="height" id="height" value="1088"
+        class="w-full p-2 bg-gray-800 rounded border border-gray-700">
     </div>
     <div>
       <label for="width" class="block font-medium">Width (px)</label>
-      <input type="number" name="width" id="width" value="1024" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+      <input type="number" name="width" id="width" value="848"
+        class="w-full p-2 bg-gray-800 rounded border border-gray-700">
     </div>
     <div>
-      <label for="filename" class="block font-medium">Filename (optional)</label>
-      <input type="text" name="filename" id="filename" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+      <label for="filename" class="block font-medium">Custom Filename</label>
+      <input type="text" name="filename" id="filename"
+        class="w-full p-2 bg-gray-800 rounded border border-gray-700" placeholder="Optional">
+    </div>
+    <div>
+      <label for="output_dir" class="block font-medium">Output Directory</label>
+      <input type="text" name="output_dir" id="output_dir"
+        class="w-full p-2 bg-gray-800 rounded border border-gray-700" placeholder="Optional path">
+    </div>
+    <div>
+      <label for="seed" class="block font-medium">Seed</label>
+      <input type="number" name="seed" id="seed"
+        class="w-full p-2 bg-gray-800 rounded border border-gray-700" placeholder="Optional">
     </div>
   </div>
 
-  <button type="submit" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white">+ Submit</button>
+  <!-- Flags -->
+  <div class="flex items-center gap-6 text-white mt-4">
+    <label class="flex items-center gap-2">
+      <input type="checkbox" name="adults" class="accent-blue-500">
+      Adults (intricate)
+    </label>
+    <label class="flex items-center gap-2">
+      <input type="checkbox" name="cover_mode" class="accent-green-500">
+      Cover Mode (Color)
+    </label>
+  </div>
+
+  <!-- Submit -->
+  <div class="mt-6">
+    <button type="submit"
+      class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded text-white font-semibold">
+      + Submit Job
+    </button>
+  </div>
 </form>
 
 <!-- Filter & Search -->
