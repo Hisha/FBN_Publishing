@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="text-3xl font-bold mb-6">­ЪДа FBN Publishing Job Dashboard</h1>
+
+<!-- Prompt Submission Form -->
+<form 
+  id="generateForm"
+  class="mb-6 flex gap-2"
+  hx-post="{{ root_path }}/generate"
+  hx-target="#job-container"
+  hx-swap="none"
+  hx-on::after-request="this.reset(); htmx.trigger('#job-container', 'refresh')"
+>
+  <textarea id="promptInput" name="prompt" placeholder="Enter prompt..." 
+    class="w-full p-2 bg-gray-800 border border-gray-600 rounded text-white resize-y leading-tight"
+    rows="4"></textarea>
+
+  <!-- Exposed flags -->
+  <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm text-white">
+    <div>
+      <label for="steps" class="block font-medium">Steps</label>
+      <input type="number" name="steps" id="steps" min="1" max="20" value="4" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+    </div>
+    <div>
+      <label for="guidance_scale" class="block font-medium">Guidance Scale</label>
+      <input type="number" name="guidance_scale" id="guidance_scale" step="0.1" min="1" max="10" value="3.5" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+    </div>
+    <div>
+      <label for="height" class="block font-medium">Height (px)</label>
+      <input type="number" name="height" id="height" value="1024" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+    </div>
+    <div>
+      <label for="width" class="block font-medium">Width (px)</label>
+      <input type="number" name="width" id="width" value="1024" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+    </div>
+    <div>
+      <label for="filename" class="block font-medium">Filename (optional)</label>
+      <input type="text" name="filename" id="filename" class="w-full p-1 bg-gray-800 rounded border border-gray-700">
+    </div>
+  </div>
+
+  <button type="submit" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white">+ Submit</button>
+</form>
+
+<!-- Filter & Search -->
+<form method="GET" action="{{ request.scope.root_path }}/jobs" class="flex gap-4 mb-6">
+  <select name="status" class="bg-gray-800 border border-gray-600 rounded p-2 text-white">
+    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option>
+    <option value="queued" {% if status_filter == 'queued' %}selected{% endif %}>Queued</option>
+    <option value="processing" {% if status_filter == 'processing' %}selected{% endif %}>Processing</option>
+    <option value="done" {% if status_filter == 'done' %}selected{% endif %}>Done</option>
+    <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+  </select>
+  <input type="text" name="q" placeholder="Search..." value="{{ search_query }}" class="p-2 bg-gray-800 border border-gray-600 rounded text-white w-full">
+  <button type="submit" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-white">Apply</button>
+</form>
+
+<!-- Dynamic Job Table Container -->
+<div
+  id="job-container"
+  hx-get="{{ root_path }}/partials/job_table?status={{ status_filter }}&q={{ search_query }}"
+  hx-trigger="load, every 30s"
+  hx-swap="innerHTML"
+  class="space-y-6">
+</div>
+{% endblock %}
