@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+  <h1 class="text-3xl font-bold mb-6">🛠️ Admin Panel</h1>
+
+  <div class="bg-gray-800 p-6 rounded shadow mb-8">
+    <h2 class="text-xl font-semibold mb-3">🖥️ System Info</h2>
+    <ul class="space-y-2 text-gray-300">
+      <li><strong>Active Queue Length:</strong> {{ system.active_queue_length }}</li>
+      <li><strong>Active Workers:</strong> {{ system.active_workers }}</li>
+      <li><strong>CPU Cores:</strong> {{ system.cpu_cores }}</li>
+      <li><strong>Disk Usage:</strong> {{ system.disk_used_gb }} GB used / {{ system.disk_total_gb }} GB total</li>
+      <li><strong>Free Disk:</strong> {{ system.disk_free_gb }} GB</li>
+      <li><strong>Memory:</strong> {{ system.memory_used_gb }} GB used ({{ system.memory_percent }}%) / {{ system.memory_total_gb }} GB total</li>
+    </ul>
+  </div>
+
+  <!-- Metrics Section -->
+  <div 
+    id="metrics-container"
+    hx-get="{{ root_path }}/partials/metrics"
+    hx-trigger="load, every 30s"
+    hx-swap="innerHTML"
+    class="bg-gray-800 p-6 rounded shadow mb-8"
+  >
+    {% include "partials/_metrics.html" %}
+  </div>
+
+  <div class="bg-gray-800 p-6 rounded shadow">
+    <h2 class="text-2xl font-semibold mb-4">🧹 Maintenance Actions</h2>
+    <div class="flex flex-col gap-4">
+      <form method="POST" action="{{ request.scope.root_path }}/admin/cleanup">
+        <button class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-white">🧽 Cleanup Old Jobs</button>
+      </form>
+      <form method="POST" action="{{ request.scope.root_path }}/admin/cleanup_failed">
+        <button class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-white">❌ Delete Failed Jobs</button>
+      </form>
+      <form method="POST" action="{{ request.scope.root_path }}/admin/archive">
+        <button class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white">📦 Archive Done Jobs</button>
+      </form>
+      <form method="POST" action="{{ request.scope.root_path }}/admin/archive_done">
+        <button class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white">🧾 Move 'Done' Jobs to Archive Table</button>
+      </form>
+      <form method="POST" action="{{ request.scope.root_path }}/admin/clear_queue">
+        <button class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-white">🛑 Clear Job Queue</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
