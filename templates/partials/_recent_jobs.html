@@ -1,0 +1,21 @@
+<div class="space-y-4" id="job-container">
+  {% for job in jobs %}
+    <div class="p-3 mb-2 rounded bg-gray-800">
+      <div class="flex justify-between items-center mb-1">
+        <a href="{{ root_path }}/job/{{ job.job_id }}" class="text-white no-underline hover:no-underline font-bold">
+          {{ job.prompt }}
+        </a>
+        <span class="text-xs px-2 py-1 rounded 
+          {% if job.status == 'done' %}bg-green-700
+          {% elif job.status == 'failed' %}bg-red-700
+          {% elif job.status == 'queued' %}bg-yellow-700
+          {% elif job.status in ['processing', 'in_progress'] %}bg-blue-700
+          {% else %}bg-gray-700{% endif %}
+          text-white whitespace-nowrap ml-4">
+          {{ job.status }}
+        </span>
+      </div>
+      <div class="text-xs">Updated: {{ job.end_time | localtime if job.end_time else job.start_time | localtime }}</div>
+    </div>
+  {% endfor %}
+</div>
