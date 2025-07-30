@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1 class="text-3xl font-bold mb-6">🖼️ FBN Publishing Gallery</h1>
+
+  {% if images|length == 0 %}
+    <p class="text-gray-400">No images found in FluxImages directory.</p>
+  {% else %}
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      {% for image in images %}
+        <a href="{{ request.scope.root_path }}/gallery/{{ image.job_id }}" class="block bg-gray-800 rounded shadow hover:bg-gray-700">
+          <img src="{{ request.scope.root_path }}/images/{{ image.filename }}" alt="{{ image.filename }}" class="w-full h-[256px] object-cover rounded-t">
+          <div class="p-2 text-xs text-gray-300 truncate">{{ image.filename }}</div>
+        </a>
+      {% endfor %}
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="flex justify-between mt-6 text-white">
+      {% if has_prev %}
+        <a href="{{ request.scope.root_path }}/gallery?page={{ page - 1 }}&limit={{ limit }}" class="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600">← Previous</a>
+      {% else %}
+        <span></span>
+      {% endif %}
+      {% if has_next %}
+        <a href="{{ request.scope.root_path }}/gallery?page={{ page + 1 }}&limit={{ limit }}" class="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600">Next →</a>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}
