@@ -16,7 +16,7 @@ from db import (
 )
 
 OUTPUT_DIR = os.path.expanduser("~/FluxImages")
-PYTHON_BIN = "/home/smithkt/flux_schnell_cpu/flux_env/bin/python"
+PYTHON_BIN = "/home/smithkt/FBN_publishing/FBNP_env/bin/python"
 RUN_FLUX_SCRIPT = "/home/smithkt/FBN_publishing/run_flux.py"
 
 def add_job_to_db_and_queue(params):
