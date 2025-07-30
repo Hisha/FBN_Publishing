@@ -71,6 +71,13 @@ def add_job(job_id, prompt, steps, guidance_scale, height, width, autotune,
     conn.commit()
     conn.close()
 
+def count_jobs_by_status(status: str) -> int:
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM jobs WHERE status = ?", (status,))
+    count = c.fetchone()[0]
+    conn.close()
+    return count
 
 # ==========================
 # ✅ Update Job Status
