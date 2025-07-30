@@ -10,7 +10,12 @@
   hx-post="{{ root_path }}/generate"
   hx-target="#job-container"
   hx-swap="none"
-  hx-on::after-request="this.reset(); htmx.trigger('#job-container', 'refresh')"
+  hx-on::after-request="
+    this.reset();
+    htmx.trigger('#job-container', 'refresh');
+    document.getElementById('successToast').classList.remove('hidden');
+    setTimeout(() => document.getElementById('successToast').classList.add('hidden'), 3000);
+  "
 >
   <!-- Prompt Input -->
   <div>
@@ -79,6 +84,11 @@
     </button>
   </div>
 </form>
+
+<!-- ✅ Success Toast -->
+<div id="successToast" class="hidden fixed bottom-6 right-6 bg-green-600 text-white px-4 py-2 rounded shadow-lg text-sm">
+  ✅ Job submitted successfully!
+</div>
 
 <!-- Filter & Search -->
 <form method="GET" action="{{ request.scope.root_path }}/jobs" class="flex gap-4 mb-6">
