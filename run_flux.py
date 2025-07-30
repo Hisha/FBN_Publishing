@@ -74,7 +74,7 @@ def main():
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
     parser.add_argument("--quiet", action="store_true", help="Suppress verbose logs")
     parser.add_argument("--adults", action="store_true", help="Intricate design for adults")
-    parser.add_argument("--cover_mode", action="store_true", help="Enable full-color cover art mode")
+    parser.add_argument("--cover_mode", action="store_true", help="Enable crayon/pencil style colorized cover art")
 
     # Upscale toggle
     parser.add_argument("--no-upscale", action="store_true", help="Disable KDP upscaling")
@@ -103,7 +103,14 @@ def main():
 
     # ✅ Build prompt logic
     if args.cover_mode:
-        full_prompt = args.prompt  # Full color cover, no restrictions
+        # Coloring-book style but fully colored with texture
+        full_prompt = (
+            f"{args.prompt}, coloring book page fully colored in, "
+            "hand-drawn style, crayon and colored pencil texture, soft and imperfect color fills, "
+            "bold black outlines, vibrant yet natural colors, slight paper grain, cozy artistic feel"
+        )
+        # Strong negatives to avoid realism or 3D
+        args.negative_prompt += ", photorealistic, realistic, hyper-realistic, 3d render, CGI, digital painting"
     else:
         base_template = (
             "black and white line art, clean bold outlines, highly detailed, "
