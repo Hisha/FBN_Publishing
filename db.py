@@ -129,6 +129,36 @@ def get_job(job_id):
     conn.close()
     return dict(row) if row else None
 
+def get_job_by_filename(filename):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM jobs WHERE filename = ?", (filename,))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def get_all_jobs():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM jobs ORDER BY start_time DESC")
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def get_completed_jobs_for_archive(days=1):
+    cutoff = datetime.utcnow().timestamp() - (days * 86400)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('''
+        SELECT job_id, filename, end_time FROM jobs
+        WHERE status = 'done' AND COALESCE(strftime('%s', end_time), 0) < ?
+    ''', (cutoff,))
+    rows = c.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 def get_recent_jobs(limit=50, status=None):
     conn = sqlite3.connect(DB_PATH)
@@ -163,6 +193,39 @@ def get_recent_jobs(limit=50, status=None):
 
     return sorted([dict(r) for r in rows], key=sort_key)[:limit]
 
+def get_job_metrics():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    c.execute("SELECT COUNT(*) as total FROM jobs")
+    total = c.fetchone()["total"]
+
+    c.execute("SELECT COUNT(*) as completed FROM jobs WHERE status = 'done'")
+    done = c.fetchone()["completed"]
+
+    c.execute("SELECT COUNT(*) as failed FROM jobs WHERE status = 'failed'")
+    failed = c.fetchone()["failed"]
+
+    # Duration in seconds
+    c.execute('''
+        SELECT AVG(strftime('%s', end_time) - strftime('%s', start_time)) as avg_duration
+        FROM jobs
+        WHERE status = 'done' AND start_time IS NOT NULL AND end_time IS NOT NULL
+    ''')
+    duration = c.fetchone()["avg_duration"]
+
+    c.execute("SELECT MAX(start_time) as last_job FROM jobs")
+    last_job = c.fetchone()["last_job"]
+
+    conn.close()
+    return {
+        "total_jobs": total,
+        "completed_jobs": done,
+        "failed_jobs": failed,
+        "average_duration_seconds": round(duration or 0, 2),
+        "most_recent_job_time": format_local_time(last_job) if last_job else "N/A"
+    }
 
 def get_oldest_queued_job():
     conn = sqlite3.connect(DB_PATH)
@@ -208,6 +271,31 @@ def delete_job(job_id):
     conn.close()
     return filename
 
+def delete_old_jobs(days=7):
+    cutoff = datetime.utcnow().timestamp() - (days * 86400)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # Get jobs to delete
+    c.execute('''
+        SELECT job_id, filename FROM jobs
+        WHERE 
+            status IN ('done', 'failed') AND
+            COALESCE(strftime('%s', end_time), 0) < ?
+    ''', (cutoff,))
+    jobs = c.fetchall()
+
+    # Delete them
+    c.execute('''
+        DELETE FROM jobs
+        WHERE 
+            status IN ('done', 'failed') AND
+            COALESCE(strftime('%s', end_time), 0) < ?
+    ''', (cutoff,))
+    conn.commit()
+    conn.close()
+
+    return [dict(job) for job in jobs]
 
 def delete_queued_jobs():
     conn = sqlite3.connect(DB_PATH)
