@@ -415,9 +415,13 @@ def generate_from_form(
     prompt: str = Form(...),
     steps: int = Form(4),
     guidance_scale: float = Form(3.5),
-    height: int = Form(1024),
-    width: int = Form(1024),
+    height: int = Form(1088),  # Default KDP portrait size
+    width: int = Form(848),
     filename: Optional[str] = Form(None),
+    output_dir: Optional[str] = Form(None),
+    adults: bool = Form(False),
+    cover_mode: bool = Form(False),
+    seed: Optional[int] = Form(None)
 ):
     require_login(request)
 
@@ -428,10 +432,17 @@ def generate_from_form(
         "height": height,
         "width": width,
         "filename": filename,
-        "autotune": True  # Force autotune to always be enabled
+        "output_dir": output_dir,
+        "autotune": True,   # Always enabled for FBN_Publishing
+        "adults": adults,
+        "cover_mode": cover_mode,
+        "seed": seed
     })
 
-    return RedirectResponse(url=f"{request.scope.get('root_path', '')}/job/{job_info['job_id']}", status_code=303)
+    return RedirectResponse(
+        url=f"{request.scope.get('root_path', '')}/job/{job_info['job_id']}",
+        status_code=303
+    )
 
 @app.post("/generate/json")
 def generate_from_json(payload: PromptRequest, request: Request, auth=Depends(require_token)):
