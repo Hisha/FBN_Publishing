@@ -91,6 +91,14 @@ def sort_job_priority(job):
         parse_time(job.get("end_time") or job.get("start_time")),  # Most recent first
     )
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logging.error(f"Validation Error at {request.url}: {exc.errors()} | Body: {await request.body()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": await request.body()}
+    )
+
 #####################################################################################
 #                                   GET                                             #
 #####################################################################################
