@@ -420,16 +420,14 @@ def generate_from_form(
     filename: Optional[str] = Form(None),
     output_dir: Optional[str] = Form(None),
     seed: Optional[int] = Form(None),
-    adults: Optional[str] = Form(None),       # Will be "on" if checked
-    cover_mode: Optional[str] = Form(None)    # Will be "on" if checked
+    adults: Optional[str] = Form(None),
+    cover_mode: Optional[str] = Form(None)
 ):
     require_login(request)
 
-    # ✅ Normalize checkboxes
     adults_flag = adults == "on"
     cover_mode_flag = cover_mode == "on"
 
-    # ✅ Add job to queue
     job_info = add_job_to_db_and_queue({
         "prompt": prompt.strip(),
         "steps": steps,
@@ -444,14 +442,15 @@ def generate_from_form(
         "seed": seed
     })
 
-    # ✅ HTMX partial feedback: Replace button area with success message
+    logger.info(f"New job created from form: {job_info['job_id']} ({prompt})")
+
     return HTMLResponse(f"""
-    <div class='p-4 bg-green-800 text-white rounded'>
+    <div class="p-4 bg-green-800 text-white rounded mt-4">
         ✅ Job <strong>{job_info['job_id']}</strong> added successfully!
-        <a href='{request.scope.get('root_path', '')}/job/{job_info['job_id']}' class='underline'>View Job</a>
+        <br>
+        <a href="{request.scope.get('root_path', '')}/job/{job_info['job_id']}" class="underline text-blue-300">View Job Details</a>
     </div>
     """)
-
 
 @app.post("/generate/json")
 def generate_from_json(payload: PromptRequest, request: Request, auth=Depends(require_token)):
