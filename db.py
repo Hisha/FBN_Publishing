@@ -46,7 +46,8 @@ def init_db():
         output_dir TEXT,
         start_time TEXT,
         end_time TEXT,
-        error_message TEXT
+        error_message TEXT,
+        page_count INTEGER
     )
     ''')
     conn.commit()
