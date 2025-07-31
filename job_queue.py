@@ -54,7 +54,8 @@ def add_job_to_db_and_queue(params):
         cover_mode=params.get("cover_mode", False),
         output_dir=output_dir,
         custom_filename=custom_filename,
-        seed=params.get("seed")
+        seed=params.get("seed"),
+        page_count=job_data.get("page_count")
     )
 
     return {
