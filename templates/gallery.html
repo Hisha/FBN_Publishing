@@ -9,7 +9,11 @@
     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
       {% for image in images %}
         <a href="{{ request.scope.root_path }}/gallery/{{ image.job_id }}" class="block bg-gray-800 rounded shadow hover:bg-gray-700">
-          <img src="{{ request.scope.root_path }}/images/{{ image.filename }}" alt="{{ image.filename }}" class="w-full h-[256px] object-cover rounded-t">
+          <img 
+            src="{{ request.scope.root_path }}/thumbnails/{{ image.filename }}" 
+            alt="{{ image.filename }}" 
+            class="w-full h-[200px] object-cover rounded-t bg-gray-900"
+            loading="lazy">
           <div class="p-2 text-xs text-gray-300 truncate">{{ image.filename }}</div>
         </a>
       {% endfor %}
