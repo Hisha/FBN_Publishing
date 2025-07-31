@@ -112,6 +112,8 @@ def run_worker():
                 cmd.append("--cover_mode")
             if job.get("seed"):
                 cmd.extend(["--seed", str(job["seed"])])
+            if job.get("page_count"):
+                cmd.extend(["--page_count", str(job["page_count"])])
 
             print(f"▶ Running command: {' '.join(cmd)}")
 
