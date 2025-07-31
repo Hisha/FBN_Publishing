@@ -46,6 +46,7 @@ class PromptRequest(BaseModel):
     autotune: bool = True
     adults: bool = False          # For detailed adult coloring pages
     cover_mode: bool = False      # For cover generation (color allowed)
+    page_count: Optional[int] = None
     seed: Optional[int] = None    # Optional for reproducibility
     filename: Optional[str] = None  # Optional custom filename
     output_dir: Optional[str] = None
