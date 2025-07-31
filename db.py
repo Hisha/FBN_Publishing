@@ -58,17 +58,17 @@ def init_db():
 # ✅ Add a Job
 # ==========================
 def add_job(job_id, prompt, steps, guidance_scale, height, width, autotune,
-            adults, cover_mode, output_dir=None, custom_filename=None, seed=None):
+            adults, cover_mode, output_dir=None, custom_filename=None, seed=None, page_count=None):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
     INSERT INTO jobs (
         job_id, prompt, steps, guidance_scale, height, width, autotune,
-        adults, cover_mode, upscaled, mode, seed, status, filename,
+        adults, cover_mode, upscaled, mode, seed, page_count, status, filename,
         custom_filename, output_dir
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 'queued', NULL, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, 'queued', NULL, ?, ?)
     ''', (job_id, prompt, steps, guidance_scale, height, width, int(autotune),
-          int(adults), int(cover_mode), seed, custom_filename, output_dir))
+          int(adults), int(cover_mode), seed, page_count, custom_filename, output_dir))
     conn.commit()
     conn.close()
 
