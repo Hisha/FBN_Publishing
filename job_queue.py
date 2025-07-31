@@ -6,6 +6,7 @@ import re
 import shutil
 import json
 from datetime import datetime
+from PIL import Image
 
 from db import (
     add_job,
@@ -68,6 +69,15 @@ def add_job_to_db_and_queue(params):
 def clear_queue():
     delete_queued_jobs()
 
+def create_thumbnail(source_path, dest_path, size=(400, 400)):
+    try:
+        img = Image.open(source_path)
+        img.thumbnail(size)
+        img.save(dest_path, "PNG", optimize=True)
+        return True
+    except Exception as e:
+        print(f"⚠️ Failed to create thumbnail: {e}")
+        return False
 
 def run_worker():
     while True:
@@ -198,6 +208,13 @@ def run_worker():
                     print(f"✅ Copied file to: {dest_path}")
             except Exception as copy_err:
                 print(f"⚠️ Failed to copy to output_dir: {copy_err}")
+
+            # ✅ Create thumbnail for gallery
+            thumb_dir = os.path.join(OUTPUT_DIR, "thumbnails")
+            os.makedirs(thumb_dir, exist_ok=True)
+            thumb_path = os.path.join(thumb_dir, final_filename)
+            create_thumbnail(final_path, thumb_path)
+            print(f"✅ Thumbnail created at {thumb_path}")
 
         except Exception as e:
             update_job_status(job_id, "failed", end_time=datetime.utcnow().isoformat(), error_message=str(e))
