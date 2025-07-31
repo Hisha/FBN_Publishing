@@ -332,6 +332,13 @@ def status(job_id: str):
 def terms_page(request: Request):
     return templates.TemplateResponse("terms.html", {"request": request})
 
+@app.get("/thumbnails/{filename}")
+def get_thumbnail(filename: str):
+    thumb_path = os.path.join(OUTPUT_DIR, "thumbnails", filename)
+    if not os.path.exists(thumb_path):
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    return FileResponse(thumb_path, media_type="image/png")
+
 #####################################################################################
 #                                   POST                                            #
 #####################################################################################
