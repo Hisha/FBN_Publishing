@@ -418,8 +418,8 @@ def admin_delete(request: Request, job_id: str):
         except Exception as e:
             print(f"⚠️ Failed to delete file {path}: {e}")
 
-    # ✅ Redirect back to jobs list
-    return RedirectResponse(url="/jobs", status_code=303)
+    # ✅ Redirect back to jobs page (with root_path)
+    return RedirectResponse(url=f"{request.scope.get('root_path', '')}/jobs", status_code=303)
 
 @app.post("/clear_queue")
 def clear_queue_api(auth=Depends(require_token)):
