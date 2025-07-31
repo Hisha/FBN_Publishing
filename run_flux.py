@@ -9,27 +9,34 @@ from datetime import datetime
 from diffusers import DiffusionPipeline
 import multiprocessing
 import re
+from PIL import Image
 
-# Target print size for KDP interior pages
-KDP_WIDTH = 2550   # 8.5 inches * 300 DPI
-KDP_HEIGHT = 3300  # 11 inches * 300 DPI
+# KDP Specs
+BLEED_INCH = 0.125
+DPI = 300
 
-# Absolute path to RealSR models folder
+# RealSR Models
 REALSR_MODEL_PATH = "/usr/local/bin/models/models-DF2K"
 
-def upscale_image(input_path, output_path):
-    """
-    Upscales an image using RealSR NCNN Vulkan with absolute model path.
-    Assumes realsr-ncnn-vulkan binary is installed and models are in REALSR_MODEL_PATH.
-    """
+
+def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
+    """Calculate KDP cover wrap dimensions in pixels."""
+    spine_in = round(page_count / 444, 3)  # spine thickness in inches
+    width_in = (trim_width * 2) + spine_in + (BLEED_INCH * 2)
+    height_in = trim_height + (BLEED_INCH * 2)
+    return int(width_in * DPI), int(height_in * DPI)  # width_px, height_px
+
+
+def upscale_image(input_path, output_path, scale):
+    """Upscales an image using RealSR NCNN Vulkan with dynamic scale."""
     try:
         cmd = [
             "realsr-ncnn-vulkan",
             "-i", input_path,
             "-o", output_path,
-            "-s", "4",                         # 4x upscale
-            "-m", REALSR_MODEL_PATH,          # Absolute model path
-            "-g", "-1"                        # Force CPU
+            "-s", str(scale),                    # dynamic scale
+            "-m", REALSR_MODEL_PATH,
+            "-g", "-1"                           # CPU mode
         ]
         subprocess.run(cmd, check=True)
         return os.path.exists(output_path)
@@ -43,45 +50,46 @@ def upscale_image(input_path, output_path):
         print(f"⚠️ Unexpected error during upscale: {e}")
         return False
 
+
 def main():
     parser = argparse.ArgumentParser(description="FBN Publishing image generator (Flux Schnell + RealSR)")
 
     # Core options
-    parser.add_argument("--prompt", type=str, required=True, help="Main subject or theme")
+    parser.add_argument("--prompt", type=str, required=True)
     parser.add_argument("--negative_prompt", type=str,
-                        default="blur, background clutter, text, watermark, trademarked, copyrighted",
-                        help="Negative prompt to avoid unwanted features")
-    parser.add_argument("--steps", type=int, default=4, help="Number of inference steps")
-    parser.add_argument("--guidance_scale", type=float, default=3.5, help="Classifier-free guidance scale")
+                        default="blur, background clutter, text, watermark, trademarked, copyrighted")
+    parser.add_argument("--steps", type=int, default=4)
+    parser.add_argument("--guidance_scale", type=float, default=3.5)
 
     # Image size
-    parser.add_argument("--height", type=int, default=None, help="Image height in px")
-    parser.add_argument("--width", type=int, default=None, help="Image width in px")
-    parser.add_argument("--preset", type=str, choices=["square", "portrait"], default="portrait",
-                        help="Aspect ratio preset: 'square' or 'portrait'")
+    parser.add_argument("--height", type=int, default=None)
+    parser.add_argument("--width", type=int, default=None)
+    parser.add_argument("--preset", type=str, choices=["square", "portrait"], default="portrait")
+
+    # Cover-specific
+    parser.add_argument("--page_count", type=int, default=None, help="Total pages for cover size calculation")
 
     # Output
-    parser.add_argument("--output", type=str, default=None, help="Output filename")
-    parser.add_argument("--output_dir", type=str, default="~/FluxImages/", help="Directory for saving")
+    parser.add_argument("--output", type=str, default=None)
+    parser.add_argument("--output_dir", type=str, default="~/FluxImages/")
 
     # Performance
-    parser.add_argument("--threads", type=int, default=8, help="Manual thread count")
-    parser.add_argument("--autotune", action="store_true", help="Auto-select optimal thread count")
+    parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--autotune", action="store_true")
 
     # Advanced flags
-    parser.add_argument("--model_path", type=str, default=os.path.expanduser("~/FBN_publishing/"),
-                        help="Path to local model folder")
-    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
-    parser.add_argument("--quiet", action="store_true", help="Suppress verbose logs")
-    parser.add_argument("--adults", action="store_true", help="Intricate design for adults")
-    parser.add_argument("--cover_mode", action="store_true", help="Enable crayon/pencil style colorized cover art")
+    parser.add_argument("--model_path", type=str, default=os.path.expanduser("~/FBN_publishing/"))
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--adults", action="store_true")
+    parser.add_argument("--cover_mode", action="store_true")
 
     # Upscale toggle
-    parser.add_argument("--no-upscale", action="store_true", help="Disable KDP upscaling")
+    parser.add_argument("--no-upscale", action="store_true")
 
     args = parser.parse_args()
 
-    # ✅ Threads
+    # ✅ Thread tuning
     if args.autotune:
         logical_cores = multiprocessing.cpu_count()
         tuned_threads = max(4, int(logical_cores * 0.75))
@@ -90,27 +98,34 @@ def main():
             print(f"🧠 Auto-tuned threads: {tuned_threads}/{logical_cores}")
     else:
         torch.set_num_threads(args.threads)
-        if not args.quiet:
-            print(f"🧠 Using manual thread count: {args.threads}")
 
-    # ✅ Aspect ratio
-    if args.preset == "square":
-        args.height = args.height or 1024
-        args.width = args.width or 1024
-    elif args.preset == "portrait":
-        args.height = args.height or 1088
-        args.width = args.width or 848
+    # ✅ Calculate cover ratio if page_count given
+    final_width = None
+    final_height = None
+    if args.page_count and args.cover_mode:
+        final_width, final_height = calculate_cover_dimensions(args.page_count)
+        aspect_ratio = final_width / final_height
+        # Start with smaller image at same ratio
+        args.width = 1024
+        args.height = int(args.width / aspect_ratio)
+    else:
+        # Fallback to normal coloring pages
+        if args.preset == "square":
+            args.height = args.height or 1024
+            args.width = args.width or 1024
+        else:
+            args.height = args.height or 1088
+            args.width = args.width or 848
 
-    # ✅ Build prompt logic
+    # ✅ Build prompt
     if args.cover_mode:
-        # Coloring-book style but fully colored with texture
         full_prompt = (
-            f"{args.prompt}, coloring book page fully colored in, "
-            "hand-drawn style, crayon and colored pencil texture, soft and imperfect color fills, "
-            "bold black outlines, vibrant yet natural colors, slight paper grain, cozy artistic feel"
+            f"{args.prompt}, full wraparound book cover layout, "
+            "leave room for title text on front, spine, and description space on back, "
+            "hand-colored crayon and colored pencil style, visible wax texture, uneven coloring, "
+            "soft artistic feel, vibrant but not overly saturated colors"
         )
-        # Strong negatives to avoid realism or 3D
-        args.negative_prompt += ", photorealistic, realistic, hyper-realistic, 3d render, CGI, digital painting"
+        args.negative_prompt += ", photorealistic, realistic, hyper-realistic, CGI"
     else:
         base_template = (
             "black and white line art, clean bold outlines, highly detailed, "
@@ -119,8 +134,6 @@ def main():
         )
         detail_tag = ", for adults, very intricate design" if args.adults else ", for kids, simple and fun"
         full_prompt = f"{args.prompt}, {base_template}{detail_tag}"
-
-        # Add strong negatives to prevent accidental color in coloring pages
         args.negative_prompt += ", color, colored, gradients"
 
     # ✅ Seed
@@ -160,42 +173,41 @@ def main():
     image.save(output_path)
     end = time.time()
 
-    # ✅ Upscale if enabled
+    # ✅ Upscale dynamically
     final_output_path = output_path
     upscaled_done = False
-
-    if not args.no_upscale:
+    if not args.no-upscale and final_width and final_height:
         if not args.quiet:
-            print(f"🔍 Upscaling to KDP size using RealSR...")
-        if upscale_image(output_path, upscaled_path):
-            try:
-                os.remove(output_path)  # delete original
-                shutil.move(upscaled_path, output_path)  # rename upscaled
+            print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR...")
+        try:
+            img = Image.open(output_path)
+            current_w, current_h = img.size
+            scale = round(final_width / current_w, 2)
+            if upscale_image(output_path, upscaled_path, scale):
+                os.remove(output_path)
+                shutil.move(upscaled_path, output_path)
                 upscaled_done = True
-                final_output_path = output_path
-            except Exception as e:
-                print(f"⚠️ Failed to replace original with upscaled: {e}")
-        else:
-            if not args.quiet:
-                print("⚠️ Upscale failed, keeping original image.")
+        except Exception as e:
+            print(f"⚠️ Failed dynamic upscale: {e}")
 
     # ✅ Build JSON result
     result = {
         "status": "success",
-        "file": final_output_path,
+        "file": output_path,
         "prompt": full_prompt,
         "negative_prompt": args.negative_prompt,
         "seed": args.seed,
         "steps": args.steps,
         "guidance_scale": args.guidance_scale,
-        "height": args.height,
-        "width": args.width,
+        "height": final_height if final_height else args.height,
+        "width": final_width if final_width else args.width,
         "upscaled": upscaled_done,
         "mode": "cover" if args.cover_mode else "coloring",
         "time_sec": round(end - start, 2)
     }
 
     print(json.dumps(result))
+
 
 if __name__ == "__main__":
     main()
