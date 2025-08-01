@@ -95,7 +95,6 @@ def main():
     # Advanced flags
     parser.add_argument("--model_path", type=str, default=os.path.expanduser("~/FBN_publishing/"))
     parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--adults", action="store_true")
     parser.add_argument("--cover_mode", action="store_true")
 
@@ -109,8 +108,7 @@ def main():
         logical_cores = multiprocessing.cpu_count()
         tuned_threads = max(4, int(logical_cores * 0.75))
         torch.set_num_threads(tuned_threads)
-        if not args.quiet:
-            print(f"🧠 Auto-tuned threads: {tuned_threads}/{logical_cores}")
+        print(f"🧠 Auto-tuned threads: {tuned_threads}/{logical_cores}")
     else:
         torch.set_num_threads(args.threads)
 
@@ -125,8 +123,7 @@ def main():
         final_width, final_height = INTERIOR_WIDTH, INTERIOR_HEIGHT
         start_width, start_height = 848, 1088
 
-    if not args.quiet:
-        print(f"📏 Final Size: {final_width}x{final_height}, Starting Size: {start_width}x{start_height}")
+    print(f"📏 Final Size: {final_width}x{final_height}, Starting Size: {start_width}x{start_height}")
 
     # ✅ Build prompt
     if args.cover_mode:
@@ -165,8 +162,7 @@ def main():
     pipe.to("cpu")
     pipe.enable_attention_slicing()
 
-    if not args.quiet:
-        print(f"⏳ Generating image for prompt: {full_prompt}")
+    print(f"⏳ Generating image for prompt: {full_prompt}")
 
     start = time.time()
     image = pipe(
@@ -185,8 +181,7 @@ def main():
     upscaled_done = False
 
     if not args.no_upscale:
-        if not args.quiet:
-            print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR...")
+        print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR...")
         if upscale_image_multistep(output_path, upscaled_path, final_width):
             try:
                 os.remove(output_path)
