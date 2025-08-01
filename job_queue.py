@@ -119,7 +119,8 @@ def run_worker():
             print(f"▶ Running command: {' '.join(cmd)}")
 
             # ✅ Run the command
-            process = subprocess.run(cmd, capture_output=True, text=True)
+            #process = subprocess.run(cmd, capture_output=True, text=True)
+            process = subprocess.run(cmd)
             stdout, stderr = process.stdout.strip(), process.stderr.strip()
 
             if process.returncode != 0:
