@@ -24,10 +24,10 @@ RUN_FLUX_SCRIPT = "/home/smithkt/FBN_publishing/run_flux.py"
 def add_job_to_db_and_queue(params):
     job_id = uuid.uuid4().hex[:8]
 
-    # Internal filename for tracking
+    # Internal filename
     internal_filename = f"{job_id}.png"
 
-    # Sanitize custom filename if provided
+    # Sanitize custom filename
     requested_filename = params.get("filename")
     custom_filename = None
     if requested_filename:
@@ -35,13 +35,13 @@ def add_job_to_db_and_queue(params):
         if not custom_filename.lower().endswith(".png"):
             custom_filename += ".png"
 
-    # Handle output directory if provided
+    # Output directory
     output_dir = params.get("output_dir")
     if output_dir:
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
         os.makedirs(output_dir, exist_ok=True)
 
-    # Insert into DB
+    # ✅ Insert into DB
     add_job(
         job_id=job_id,
         prompt=params["prompt"],
@@ -55,7 +55,7 @@ def add_job_to_db_and_queue(params):
         output_dir=output_dir,
         custom_filename=custom_filename,
         seed=params.get("seed"),
-        page_count=job.get("page_count")
+        page_count=params.get("page_count")  # ✅ FIXED
     )
 
     return {
@@ -70,6 +70,7 @@ def add_job_to_db_and_queue(params):
 def clear_queue():
     delete_queued_jobs()
 
+
 def create_thumbnail(source_path, dest_path, size=(400, 400)):
     try:
         img = Image.open(source_path)
@@ -79,6 +80,7 @@ def create_thumbnail(source_path, dest_path, size=(400, 400)):
     except Exception as e:
         print(f"⚠️ Failed to create thumbnail: {e}")
         return False
+
 
 def run_worker():
     while True:
@@ -91,7 +93,7 @@ def run_worker():
         update_job_status(job_id, "in_progress", start_time=datetime.utcnow().isoformat())
 
         try:
-            # Build run_flux.py command
+            # ✅ Build command
             cmd = [
                 PYTHON_BIN,
                 RUN_FLUX_SCRIPT,
@@ -118,63 +120,35 @@ def run_worker():
 
             print(f"▶ Running command: {' '.join(cmd)}")
 
-            # Execute and capture output
+            # ✅ Run the command
             process = subprocess.run(cmd, capture_output=True, text=True)
             stdout, stderr = process.stdout.strip(), process.stderr.strip()
 
             if process.returncode != 0:
-                update_job_status(
-                    job_id,
-                    "failed",
-                    end_time=datetime.utcnow().isoformat(),
-                    error_message=stderr or "Unknown error"
-                )
+                update_job_status(job_id, "failed", end_time=datetime.utcnow().isoformat(),
+                                  error_message=stderr or "Unknown error")
                 print(f"❌ Process failed: {stderr}")
                 continue
 
-            # Extract JSON result
-            try:
-                json_match = re.search(r"\{.*\}", stdout, re.DOTALL)
-                if json_match:
-                    result = json.loads(json_match.group())
-                else:
-                    raise ValueError("No JSON found in output")
-            except Exception as e:
-                update_job_status(
-                    job_id,
-                    "failed",
-                    end_time=datetime.utcnow().isoformat(),
-                    error_message=f"Invalid JSON output: {str(e)}"
-                )
-                print(f"⚠️ STDOUT:\n{stdout}")
-                print(f"⚠️ STDERR:\n{stderr}")
-                continue
+            # ✅ Extract JSON
+            json_match = re.search(r"\{.*\}", stdout, re.DOTALL)
+            if not json_match:
+                raise ValueError("No JSON found in output")
+            result = json.loads(json_match.group())
 
             if result.get("status") != "success":
-                update_job_status(
-                    job_id,
-                    "failed",
-                    end_time=datetime.utcnow().isoformat(),
-                    error_message=result.get("error", "Unknown error from generator")
-                )
+                update_job_status(job_id, "failed", end_time=datetime.utcnow().isoformat(),
+                                  error_message=result.get("error", "Unknown error"))
                 continue
 
             final_path = result.get("file")
             upscaled = result.get("upscaled", False)
 
-            # ✅ If upscaled, remove original and rename upscaled to original name
-            if upscaled and "_upscaled" in final_path:
-                original_path = os.path.join(OUTPUT_DIR, f"{job_id}.png")
-                if os.path.exists(original_path):
-                    os.remove(original_path)
-                new_final_path = original_path
-                shutil.move(final_path, new_final_path)
-                final_path = new_final_path
-
+            # ✅ Ensure correct file handling
             final_filename = os.path.basename(final_path)
             mode = "cover" if job.get("cover_mode") else "coloring"
 
-            # ✅ Get actual resolution using ffprobe
+            # ✅ Resolution check
             try:
                 ffprobe_cmd = [
                     "ffprobe", "-v", "error",
@@ -184,44 +158,38 @@ def run_worker():
                 ]
                 resolution = subprocess.check_output(ffprobe_cmd, text=True).strip()
                 width, height = map(int, resolution.split('x'))
-            except Exception as e:
-                print(f"⚠️ Could not get resolution: {e}")
+            except Exception:
                 width, height = job["width"], job["height"]
 
-            # ✅ Update DB with correct resolution
-            update_job_status(
-                job_id,
-                "done",
-                end_time=datetime.utcnow().isoformat(),
-                filename=final_filename,
-                upscaled=upscaled,
-                mode=mode,
-                width=width,
-                height=height
-            )
+            # ✅ Update DB
+            update_job_status(job_id, "done",
+                              end_time=datetime.utcnow().isoformat(),
+                              filename=final_filename,
+                              upscaled=upscaled,
+                              mode=mode,
+                              width=width,
+                              height=height)
 
-            # ✅ Copy to custom output_dir if provided
-            try:
-                dest_dir = job.get("output_dir")
-                if dest_dir:
-                    os.makedirs(dest_dir, exist_ok=True)
-                    custom_filename = job.get("custom_filename")
-                    dest_path = os.path.join(dest_dir, custom_filename or final_filename)
-                    shutil.copy2(final_path, dest_path)
-                    print(f"✅ Copied file to: {dest_path}")
-            except Exception as copy_err:
-                print(f"⚠️ Failed to copy to output_dir: {copy_err}")
+            # ✅ Copy to output_dir if provided
+            dest_dir = job.get("output_dir")
+            if dest_dir:
+                os.makedirs(dest_dir, exist_ok=True)
+                custom_filename = job.get("custom_filename")
+                dest_path = os.path.join(dest_dir, custom_filename or final_filename)
+                shutil.copy2(final_path, dest_path)
+                print(f"✅ Copied file to: {dest_path}")
 
-            # ✅ Create thumbnail for gallery
+            # ✅ Create thumbnail
             thumb_dir = os.path.join(OUTPUT_DIR, "thumbnails")
             os.makedirs(thumb_dir, exist_ok=True)
-            final_filename = os.path.basename(final_output_path)
             thumb_path = os.path.join(thumb_dir, final_filename)
-            create_thumbnail(final_output_path, thumb_path)
+            create_thumbnail(final_path, thumb_path)
             print(f"✅ Thumbnail created at {thumb_path}")
 
         except Exception as e:
-            update_job_status(job_id, "failed", end_time=datetime.utcnow().isoformat(), error_message=str(e))
+            update_job_status(job_id, "failed",
+                              end_time=datetime.utcnow().isoformat(),
+                              error_message=str(e))
 
 
 # Init DB
