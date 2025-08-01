@@ -215,8 +215,9 @@ def run_worker():
             # ✅ Create thumbnail for gallery
             thumb_dir = os.path.join(OUTPUT_DIR, "thumbnails")
             os.makedirs(thumb_dir, exist_ok=True)
+            final_filename = os.path.basename(final_output_path)
             thumb_path = os.path.join(thumb_dir, final_filename)
-            create_thumbnail(final_path, thumb_path)
+            create_thumbnail(final_output_path, thumb_path)
             print(f"✅ Thumbnail created at {thumb_path}")
 
         except Exception as e:
