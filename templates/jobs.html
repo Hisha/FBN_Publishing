@@ -38,16 +38,6 @@
         class="w-full p-2 bg-gray-800 rounded border border-gray-700">
     </div>
     <div>
-      <label for="height" class="block font-medium">Height (px)</label>
-      <input type="number" name="height" id="height" value="1088"
-        class="w-full p-2 bg-gray-800 rounded border border-gray-700">
-    </div>
-    <div>
-      <label for="width" class="block font-medium">Width (px)</label>
-      <input type="number" name="width" id="width" value="848"
-        class="w-full p-2 bg-gray-800 rounded border border-gray-700">
-    </div>
-    <div>
       <label for="filename" class="block font-medium">Custom Filename</label>
       <input type="text" name="filename" id="filename"
         class="w-full p-2 bg-gray-800 rounded border border-gray-700" placeholder="Optional">
@@ -62,17 +52,23 @@
       <input type="number" name="seed" id="seed"
         class="w-full p-2 bg-gray-800 rounded border border-gray-700" placeholder="Optional">
     </div>
-    <!-- Flags -->
-    <div class="flex items-center gap-6 text-white mt-4">
-      <label class="flex items-center gap-2">
-        <input type="checkbox" name="adults" class="accent-blue-500">
-          Adults (intricate)
-      </label>
-      <label class="flex items-center gap-2">
-        <input type="checkbox" name="cover_mode" class="accent-green-500">
-          Cover Mode (Color)
-      </label>
+    <div>
+      <label for="page_count" class="block font-medium">Page Count</label>
+      <input type="number" name="page_count" id="page_count" placeholder="Required if Cover Mode"
+        class="w-full p-2 bg-gray-800 rounded border border-gray-700">
     </div>
+  </div>
+
+  <!-- Flags -->
+  <div class="flex items-center gap-6 text-white mt-4">
+    <label class="flex items-center gap-2">
+      <input type="checkbox" name="adults" class="accent-blue-500">
+        Adults (intricate)
+    </label>
+    <label class="flex items-center gap-2">
+      <input type="checkbox" name="cover_mode" id="cover_mode" class="accent-green-500">
+        Cover Mode (Color)
+    </label>
   </div>
 
   <!-- Submit -->
@@ -110,4 +106,16 @@
   hx-swap="innerHTML"
   class="space-y-6">
 </div>
+
+<!-- ✅ JS: Require page_count if Cover Mode is checked -->
+<script>
+document.getElementById('cover_mode').addEventListener('change', function() {
+    const pageCountInput = document.getElementById('page_count');
+    if (this.checked) {
+        pageCountInput.setAttribute('required', 'required');
+    } else {
+        pageCountInput.removeAttribute('required');
+    }
+});
+</script>
 {% endblock %}
