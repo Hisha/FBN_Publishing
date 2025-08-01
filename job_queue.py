@@ -41,7 +41,7 @@ def add_job_to_db_and_queue(params):
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
         os.makedirs(output_dir, exist_ok=True)
 
-    # ✅ Insert into DB without height/width
+    # ✅ Insert into DB (height/width now None)
     add_job(
         job_id=job_id,
         prompt=params["prompt"],
@@ -53,7 +53,9 @@ def add_job_to_db_and_queue(params):
         output_dir=output_dir,
         custom_filename=custom_filename,
         seed=params.get("seed"),
-        page_count=params.get("page_count")
+        page_count=params.get("page_count"),
+        height=None,
+        width=None
     )
 
     return {
@@ -91,7 +93,7 @@ def run_worker():
         update_job_status(job_id, "in_progress", start_time=datetime.utcnow().isoformat())
 
         try:
-            # ✅ Build command (removed height/width)
+            # ✅ Build command (height/width removed)
             cmd = [
                 PYTHON_BIN,
                 RUN_FLUX_SCRIPT,
@@ -139,8 +141,6 @@ def run_worker():
 
             final_path = result.get("file")
             upscaled = result.get("upscaled", False)
-
-            # ✅ Ensure correct file handling
             final_filename = os.path.basename(final_path)
             mode = "cover" if job.get("cover_mode") else "coloring"
 
@@ -157,7 +157,6 @@ def run_worker():
             except Exception:
                 width, height = (result.get("width"), result.get("height"))
 
-            # ✅ Update DB
             update_job_status(job_id, "done",
                               end_time=datetime.utcnow().isoformat(),
                               filename=final_filename,
@@ -190,6 +189,5 @@ def run_worker():
                               error_message=str(e))
 
 
-# Init DB
 init_db()
 print("✅ Job queue initialized.")
