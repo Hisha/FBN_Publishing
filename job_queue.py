@@ -102,8 +102,7 @@ def run_worker():
                 "--output", f"{job_id}.png",
                 "--output_dir", OUTPUT_DIR,
                 "--steps", str(job["steps"]),
-                "--guidance_scale", str(job["guidance_scale"]),
-                "--quiet"
+                "--guidance_scale", str(job["guidance_scale"])
             ]
 
             if job.get("autotune"):
