@@ -27,27 +27,46 @@ def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
     return int(width_in * DPI), int(height_in * DPI)  # width_px, height_px
 
 
-def upscale_image(input_path, output_path, scale):
-    """Upscales an image using RealSR NCNN Vulkan with dynamic scale."""
+def upscale_image_multistep(input_path, output_path, final_width):
+    """Perform multi-step upscaling using RealSR (only supports 2x or 4x)."""
     try:
-        cmd = [
-            "realsr-ncnn-vulkan",
-            "-i", input_path,
-            "-o", output_path,
-            "-s", str(scale),                    # dynamic scale
-            "-m", REALSR_MODEL_PATH,
-            "-g", "-1"                           # CPU mode
-        ]
-        subprocess.run(cmd, check=True)
+        img = Image.open(input_path)
+        current_w, current_h = img.size
+        scale_factor = final_width / current_w
+
+        # Determine steps using only 2 or 4
+        steps = []
+        while scale_factor > 4:
+            steps.append(4)
+            scale_factor /= 4
+        if scale_factor > 2:
+            steps.append(4)
+        elif scale_factor > 1:
+            steps.append(2)
+
+        print(f"✅ RealSR steps: {steps} (Target Scale ≈ {final_width / current_w:.2f})")
+
+        temp_input = input_path
+        temp_output = None
+        for i, s in enumerate(steps):
+            temp_output = output_path if i == len(steps) - 1 else temp_input.replace(".png", f"_x{s}_{i}.png")
+            cmd = [
+                "realsr-ncnn-vulkan",
+                "-i", temp_input,
+                "-o", temp_output,
+                "-s", str(s),
+                "-m", REALSR_MODEL_PATH,
+                "-g", "-1"
+            ]
+            subprocess.run(cmd, check=True)
+            # Remove intermediate file except the original
+            if temp_input != input_path and os.path.exists(temp_input):
+                os.remove(temp_input)
+            temp_input = temp_output
+
         return os.path.exists(output_path)
-    except FileNotFoundError:
-        print("⚠️ realsr-ncnn-vulkan not found in PATH. Skipping upscale.")
-        return False
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️ Upscale failed: {e}")
-        return False
     except Exception as e:
-        print(f"⚠️ Unexpected error during upscale: {e}")
+        print(f"⚠️ Multi-step upscale failed: {e}")
         return False
 
 
@@ -177,22 +196,17 @@ def main():
     final_output_path = output_path
     upscaled_done = False
 
-    # Perform upscale only if not disabled AND we have calculated target size
     if not args.no_upscale and final_width and final_height:
         if not args.quiet:
-            print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR...")
-        try:
-            img = Image.open(output_path)
-            current_w, current_h = img.size
-            # Calculate scale factor for RealSR (round to 2 decimal places)
-            scale = round(final_width / current_w, 2)
-            if upscale_image(output_path, upscaled_path, scale):
+            print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR (multi-step)...")
+        if upscale_image_multistep(output_path, upscaled_path, final_width):
+            try:
                 os.remove(output_path)
                 shutil.move(upscaled_path, output_path)
                 upscaled_done = True
                 final_output_path = output_path
-        except Exception as e:
-            print(f"⚠️ Failed dynamic upscale: {e}")
+            except Exception as e:
+                print(f"⚠️ Failed to replace original after upscale: {e}")
 
     # ✅ Build JSON result
     result = {
@@ -211,6 +225,7 @@ def main():
     }
 
     print(json.dumps(result))
+
 
 if __name__ == "__main__":
     main()
