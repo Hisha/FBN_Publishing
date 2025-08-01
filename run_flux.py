@@ -181,8 +181,7 @@ def main():
     upscaled_done = False
 
     if not args.no_upscale and final_width and final_height:
-        if not args.quiet:
-            print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR (multi-step)...")
+        print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR (multi-step)...")
         if upscale_image_multistep(output_path, upscaled_path, final_width, final_height):
             try:
                 os.remove(output_path)
