@@ -29,8 +29,7 @@ def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
     return int(width_in * DPI), int(height_in * DPI)
 
 
-def upscale_image_multistep(input_path, output_path, final_width):
-    """Perform multi-step upscaling using RealSR (supports only 2x or 4x)."""
+def upscale_image_multistep(input_path, output_path, final_width, final_height):
     try:
         img = Image.open(input_path)
         current_w, current_h = img.size
@@ -40,15 +39,12 @@ def upscale_image_multistep(input_path, output_path, final_width):
         while scale_factor > 4:
             steps.append(4)
             scale_factor /= 4
-        if scale_factor > 2:
-            steps.append(4)
-        elif scale_factor > 1:
-            steps.append(2)
+        if scale_factor > 1:
+            steps.append(4)  # Force 4x because DF2K supports only 4x
 
         print(f"✅ RealSR Upscale Plan: Steps={steps}, Target Scale≈{final_width / current_w:.2f}")
 
         temp_input = input_path
-        temp_output = None
         for i, s in enumerate(steps):
             temp_output = output_path if i == len(steps) - 1 else temp_input.replace(".png", f"_x{s}_{i}.png")
             cmd = [
@@ -59,17 +55,21 @@ def upscale_image_multistep(input_path, output_path, final_width):
                 "-m", REALSR_MODEL_PATH,
                 "-g", "-1"
             ]
-            print(f"▶ Running RealSR step {i+1}/{len(steps)}: {cmd}")
             subprocess.run(cmd, check=True)
             if temp_input != input_path and os.path.exists(temp_input):
                 os.remove(temp_input)
             temp_input = temp_output
 
-        return os.path.exists(output_path)
+        # ✅ After RealSR, force resize to exact final dimensions
+        img = Image.open(output_path)
+        img = img.resize((final_width, final_height), Image.LANCZOS)
+        img.save(output_path)
+        print(f"✅ Final image resized to exact: {final_width}x{final_height}")
+
+        return True
     except Exception as e:
         print(f"⚠️ Multi-step upscale failed: {e}")
         return False
-
 
 def main():
     parser = argparse.ArgumentParser(description="FBN Publishing Image Generator (Flux Schnell + RealSR)")
