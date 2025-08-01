@@ -11,11 +11,13 @@ import multiprocessing
 import re
 from PIL import Image
 
-# KDP Specs
+# KDP Constants
 BLEED_INCH = 0.125
 DPI = 300
+INTERIOR_WIDTH = 2550    # 8.5" * 300dpi
+INTERIOR_HEIGHT = 3300   # 11" * 300dpi
 
-# RealSR Models
+# RealSR Model Path
 REALSR_MODEL_PATH = "/usr/local/bin/models/models-DF2K"
 
 
@@ -24,17 +26,16 @@ def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
     spine_in = round(page_count / 444, 3)  # spine thickness in inches
     width_in = (trim_width * 2) + spine_in + (BLEED_INCH * 2)
     height_in = trim_height + (BLEED_INCH * 2)
-    return int(width_in * DPI), int(height_in * DPI)  # width_px, height_px
+    return int(width_in * DPI), int(height_in * DPI)
 
 
 def upscale_image_multistep(input_path, output_path, final_width):
-    """Perform multi-step upscaling using RealSR (only supports 2x or 4x)."""
+    """Perform multi-step upscaling using RealSR (supports only 2x or 4x)."""
     try:
         img = Image.open(input_path)
         current_w, current_h = img.size
         scale_factor = final_width / current_w
 
-        # Determine steps using only 2 or 4
         steps = []
         while scale_factor > 4:
             steps.append(4)
@@ -44,7 +45,7 @@ def upscale_image_multistep(input_path, output_path, final_width):
         elif scale_factor > 1:
             steps.append(2)
 
-        print(f"✅ RealSR steps: {steps} (Target Scale ≈ {final_width / current_w:.2f})")
+        print(f"✅ RealSR Upscale Plan: Steps={steps}, Target Scale≈{final_width / current_w:.2f}")
 
         temp_input = input_path
         temp_output = None
@@ -58,8 +59,8 @@ def upscale_image_multistep(input_path, output_path, final_width):
                 "-m", REALSR_MODEL_PATH,
                 "-g", "-1"
             ]
+            print(f"▶ Running RealSR step {i+1}/{len(steps)}: {cmd}")
             subprocess.run(cmd, check=True)
-            # Remove intermediate file except the original
             if temp_input != input_path and os.path.exists(temp_input):
                 os.remove(temp_input)
             temp_input = temp_output
@@ -71,21 +72,16 @@ def upscale_image_multistep(input_path, output_path, final_width):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="FBN Publishing image generator (Flux Schnell + RealSR)")
+    parser = argparse.ArgumentParser(description="FBN Publishing Image Generator (Flux Schnell + RealSR)")
 
     # Core options
     parser.add_argument("--prompt", type=str, required=True)
     parser.add_argument("--negative_prompt", type=str,
                         default="blur, background clutter, text, watermark, trademarked, copyrighted")
-    parser.add_argument("--steps", type=int, default=4)
-    parser.add_argument("--guidance_scale", type=float, default=3.5)
+    parser.add_argument("--steps", type=int, default=6)
+    parser.add_argument("--guidance_scale", type=float, default=4.5)
 
-    # Image size
-    parser.add_argument("--height", type=int, default=None)
-    parser.add_argument("--width", type=int, default=None)
-    parser.add_argument("--preset", type=str, choices=["square", "portrait"], default="portrait")
-
-    # Cover-specific
+    # Cover mode
     parser.add_argument("--page_count", type=int, default=None, help="Total pages for cover size calculation")
 
     # Output
@@ -118,23 +114,19 @@ def main():
     else:
         torch.set_num_threads(args.threads)
 
-    # ✅ Calculate cover ratio if page_count given
-    final_width = None
-    final_height = None
-    if args.page_count and args.cover_mode:
+    # ✅ Set final and starting dimensions automatically
+    if args.cover_mode:
+        if not args.page_count:
+            raise ValueError("--page_count is required for cover_mode")
         final_width, final_height = calculate_cover_dimensions(args.page_count)
-        aspect_ratio = final_width / final_height
-        # Start with smaller image at same ratio
-        args.width = 1024
-        args.height = int(args.width / aspect_ratio)
+        start_width = 1024
+        start_height = int(start_width * (final_height / final_width))
     else:
-        # Fallback to normal coloring pages
-        if args.preset == "square":
-            args.height = args.height or 1024
-            args.width = args.width or 1024
-        else:
-            args.height = args.height or 1088
-            args.width = args.width or 848
+        final_width, final_height = INTERIOR_WIDTH, INTERIOR_HEIGHT
+        start_width, start_height = 848, 1088
+
+    if not args.quiet:
+        print(f"📏 Final Size: {final_width}x{final_height}, Starting Size: {start_width}x{start_height}")
 
     # ✅ Build prompt
     if args.cover_mode:
@@ -169,11 +161,7 @@ def main():
     upscaled_path = output_path.replace(".png", "_upscaled.png")
 
     # ✅ Load model
-    pipe = DiffusionPipeline.from_pretrained(
-        args.model_path,
-        torch_dtype=torch.float32,
-        use_safetensors=True
-    )
+    pipe = DiffusionPipeline.from_pretrained(args.model_path, torch_dtype=torch.float32, use_safetensors=True)
     pipe.to("cpu")
     pipe.enable_attention_slicing()
 
@@ -186,19 +174,19 @@ def main():
         negative_prompt=args.negative_prompt,
         num_inference_steps=args.steps,
         guidance_scale=args.guidance_scale,
-        height=args.height,
-        width=args.width
+        height=start_height,
+        width=start_width
     ).images[0]
     image.save(output_path)
     end = time.time()
 
-    # ✅ Upscale dynamically for covers
+    # ✅ Upscale dynamically
     final_output_path = output_path
     upscaled_done = False
 
-    if not args.no_upscale and final_width and final_height:
+    if not args.no-upscale:
         if not args.quiet:
-            print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR (multi-step)...")
+            print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR...")
         if upscale_image_multistep(output_path, upscaled_path, final_width):
             try:
                 os.remove(output_path)
@@ -217,8 +205,8 @@ def main():
         "seed": args.seed,
         "steps": args.steps,
         "guidance_scale": args.guidance_scale,
-        "height": final_height if final_height else args.height,
-        "width": final_width if final_width else args.width,
+        "height": final_height,
+        "width": final_width,
         "upscaled": upscaled_done,
         "mode": "cover" if args.cover_mode else "coloring",
         "time_sec": round(end - start, 2)
