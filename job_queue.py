@@ -50,6 +50,7 @@ def add_job_to_db_and_queue(params):
         autotune=params.get("autotune", True),
         adults=params.get("adults", False),
         cover_mode=params.get("cover_mode", False),
+        filename=internal_filename,
         output_dir=output_dir,
         custom_filename=custom_filename,
         seed=params.get("seed"),
