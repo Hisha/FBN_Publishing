@@ -433,13 +433,12 @@ def generate_from_form(
     prompt: str = Form(...),
     steps: int = Form(4),
     guidance_scale: float = Form(3.5),
-    height: int = Form(1088),
-    width: int = Form(848),
     filename: Optional[str] = Form(None),
     output_dir: Optional[str] = Form(None),
-    seed: Optional[str] = Form(None),  # ✅ Accept as string first
+    seed: Optional[str] = Form(None),
     adults: Optional[str] = Form(None),
-    cover_mode: Optional[str] = Form(None)
+    cover_mode: Optional[str] = Form(None),
+    page_count: Optional[int] = Form(None)  # ✅ Added this for cover jobs
 ):
     require_login(request)
 
@@ -453,13 +452,12 @@ def generate_from_form(
         "prompt": prompt.strip(),
         "steps": steps,
         "guidance_scale": guidance_scale,
-        "height": height,
-        "width": width,
         "filename": filename,
         "output_dir": output_dir,
         "autotune": True,
         "adults": adults_flag,
         "cover_mode": cover_mode_flag,
+        "page_count": page_count,  # ✅ Pass along to DB & job_queue
         "seed": seed_val
     })
 
