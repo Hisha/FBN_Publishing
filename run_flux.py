@@ -173,27 +173,31 @@ def main():
     image.save(output_path)
     end = time.time()
 
-    # ✅ Upscale dynamically
+    # ✅ Upscale dynamically for covers
     final_output_path = output_path
     upscaled_done = False
-    if not args.no-upscale and final_width and final_height:
+
+    # Perform upscale only if not disabled AND we have calculated target size
+    if not args.no_upscale and final_width and final_height:
         if not args.quiet:
             print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR...")
         try:
             img = Image.open(output_path)
             current_w, current_h = img.size
+            # Calculate scale factor for RealSR (round to 2 decimal places)
             scale = round(final_width / current_w, 2)
             if upscale_image(output_path, upscaled_path, scale):
                 os.remove(output_path)
                 shutil.move(upscaled_path, output_path)
                 upscaled_done = True
+                final_output_path = output_path
         except Exception as e:
             print(f"⚠️ Failed dynamic upscale: {e}")
 
     # ✅ Build JSON result
     result = {
         "status": "success",
-        "file": output_path,
+        "file": final_output_path,
         "prompt": full_prompt,
         "negative_prompt": args.negative_prompt,
         "seed": args.seed,
@@ -207,7 +211,6 @@ def main():
     }
 
     print(json.dumps(result))
-
 
 if __name__ == "__main__":
     main()
