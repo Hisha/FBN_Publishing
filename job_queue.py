@@ -41,21 +41,19 @@ def add_job_to_db_and_queue(params):
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
         os.makedirs(output_dir, exist_ok=True)
 
-    # ✅ Insert into DB
+    # ✅ Insert into DB without height/width
     add_job(
         job_id=job_id,
         prompt=params["prompt"],
         steps=params.get("steps", 4),
         guidance_scale=params.get("guidance_scale", 3.5),
-        height=params.get("height", 1088),
-        width=params.get("width", 848),
         autotune=params.get("autotune", True),
         adults=params.get("adults", False),
         cover_mode=params.get("cover_mode", False),
         output_dir=output_dir,
         custom_filename=custom_filename,
         seed=params.get("seed"),
-        page_count=params.get("page_count")  # ✅ FIXED
+        page_count=params.get("page_count")
     )
 
     return {
@@ -93,7 +91,7 @@ def run_worker():
         update_job_status(job_id, "in_progress", start_time=datetime.utcnow().isoformat())
 
         try:
-            # ✅ Build command
+            # ✅ Build command (removed height/width)
             cmd = [
                 PYTHON_BIN,
                 RUN_FLUX_SCRIPT,
@@ -102,8 +100,6 @@ def run_worker():
                 "--output_dir", OUTPUT_DIR,
                 "--steps", str(job["steps"]),
                 "--guidance_scale", str(job["guidance_scale"]),
-                "--height", str(job["height"]),
-                "--width", str(job["width"]),
                 "--quiet"
             ]
 
@@ -159,7 +155,7 @@ def run_worker():
                 resolution = subprocess.check_output(ffprobe_cmd, text=True).strip()
                 width, height = map(int, resolution.split('x'))
             except Exception:
-                width, height = job["width"], job["height"]
+                width, height = (result.get("width"), result.get("height"))
 
             # ✅ Update DB
             update_job_status(job_id, "done",
@@ -169,6 +165,8 @@ def run_worker():
                               mode=mode,
                               width=width,
                               height=height)
+
+            print(f"✅ Job {job_id} complete: {width}x{height}, Mode={mode}")
 
             # ✅ Copy to output_dir if provided
             dest_dir = job.get("output_dir")
