@@ -420,7 +420,7 @@ def admin_delete(request: Request, job_id: str):
     path = os.path.join(OUTPUT_DIR, filename)
     if os.path.exists(path):
         os.remove(path)
-    return RedirectResponse(url="/flux/jobs", status_code=303)
+    return RedirectResponse(url="/fbnp/jobs", status_code=303)
 
 @app.post("/clear_queue")
 def clear_queue_api(auth=Depends(require_token)):
