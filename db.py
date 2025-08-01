@@ -55,7 +55,7 @@ def init_db():
 # ✅ Add a Job
 # ==========================
 def add_job(job_id, prompt, steps, guidance_scale, autotune,
-            adults, cover_mode, output_dir=None, custom_filename=None, seed=None, page_count=None,
+            adults, cover_mode, filename, output_dir=None, custom_filename=None, seed=None, page_count=None,
             height=None, width=None):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -64,9 +64,9 @@ def add_job(job_id, prompt, steps, guidance_scale, autotune,
         job_id, prompt, steps, guidance_scale, height, width, autotune,
         adults, cover_mode, upscaled, mode, seed, page_count, status, filename,
         custom_filename, output_dir
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, 'queued', NULL, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, 'queued', ?, ?, ?)
     ''', (job_id, prompt, steps, guidance_scale, height, width, int(autotune),
-          int(adults), int(cover_mode), seed, page_count, custom_filename, output_dir))
+          int(adults), int(cover_mode), seed, page_count, filename, custom_filename, output_dir))
     conn.commit()
     conn.close()
 
