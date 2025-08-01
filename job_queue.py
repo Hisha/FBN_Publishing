@@ -55,7 +55,7 @@ def add_job_to_db_and_queue(params):
         output_dir=output_dir,
         custom_filename=custom_filename,
         seed=params.get("seed"),
-        page_count=job_data.get("page_count")
+        page_count=job.get("page_count")
     )
 
     return {
