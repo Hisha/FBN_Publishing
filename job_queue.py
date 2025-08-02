@@ -82,7 +82,6 @@ def create_thumbnail(source_path, dest_path, size=(400, 400)):
         print(f"⚠️ Failed to create thumbnail: {e}")
         return False
 
-
 def run_worker():
     while True:
         job = get_oldest_queued_job()
@@ -94,7 +93,7 @@ def run_worker():
         update_job_status(job_id, "in_progress", start_time=datetime.utcnow().isoformat())
 
         try:
-            # ✅ Build command (height/width removed)
+            # ✅ Build command
             cmd = [
                 PYTHON_BIN,
                 RUN_FLUX_SCRIPT,
@@ -118,9 +117,8 @@ def run_worker():
 
             print(f"▶ Running command: {' '.join(cmd)}")
 
-            # ✅ Run the command
-            #process = subprocess.run(cmd, capture_output=True, text=True)
-            process = subprocess.run(cmd)
+            # ✅ Run and capture JSON
+            process = subprocess.run(cmd, capture_output=True, text=True)
             stdout, stderr = process.stdout.strip(), process.stderr.strip()
 
             if process.returncode != 0:
@@ -129,44 +127,53 @@ def run_worker():
                 print(f"❌ Process failed: {stderr}")
                 continue
 
-            # ✅ Extract JSON
-            json_match = re.search(r"\{.*\}", stdout, re.DOTALL)
-            if not json_match:
-                raise ValueError("No JSON found in output")
-            result = json.loads(json_match.group())
-
-            if result.get("status") != "success":
-                update_job_status(job_id, "failed", end_time=datetime.utcnow().isoformat(),
-                                  error_message=result.get("error", "Unknown error"))
-                continue
-
-            final_path = result.get("file")
-            upscaled = result.get("upscaled", False)
-            final_filename = os.path.basename(final_path)
-            mode = "cover" if job.get("cover_mode") else "coloring"
-
-            # ✅ Resolution check
+            # ✅ Parse JSON output from run_flux.py
+            final_path, upscaled, width, height = None, False, None, None
             try:
-                ffprobe_cmd = [
-                    "ffprobe", "-v", "error",
-                    "-select_streams", "v:0",
-                    "-show_entries", "stream=width,height",
-                    "-of", "csv=s=x:p=0", final_path
-                ]
-                resolution = subprocess.check_output(ffprobe_cmd, text=True).strip()
-                width, height = map(int, resolution.split('x'))
-            except Exception:
-                width, height = (result.get("width"), result.get("height"))
+                json_match = re.search(r"\{.*\}", stdout, re.DOTALL)
+                if not json_match:
+                    raise ValueError("No JSON block in output")
 
+                result = json.loads(json_match.group())
+
+                if result.get("status") != "success":
+                    raise ValueError(f"Job error: {result.get('error', 'Unknown error')}")
+
+                final_path = result.get("file")
+                upscaled = result.get("upscaled", False)
+                width = result.get("width")
+                height = result.get("height")
+
+            except Exception as e:
+                print(f"⚠️ JSON parse failed, falling back: {e}")
+
+            # ✅ Fallback if JSON didn't give width/height or file path
+            if not final_path:
+                raise ValueError("No file path found in JSON or fallback")
+            if not width or not height:
+                try:
+                    ffprobe_cmd = [
+                        "ffprobe", "-v", "error",
+                        "-select_streams", "v:0",
+                        "-show_entries", "stream=width,height",
+                        "-of", "csv=s=x:p=0", final_path
+                    ]
+                    resolution = subprocess.check_output(ffprobe_cmd, text=True).strip()
+                    width, height = map(int, resolution.split('x'))
+                except Exception:
+                    print("⚠️ Failed to get resolution via ffprobe")
+
+            final_filename = os.path.basename(final_path)
+
+            # ✅ Update DB
             update_job_status(job_id, "done",
                               end_time=datetime.utcnow().isoformat(),
                               filename=final_filename,
                               upscaled=upscaled,
-                              mode=mode,
                               width=width,
                               height=height)
 
-            print(f"✅ Job {job_id} complete: {width}x{height}, Mode={mode}")
+            print(f"✅ Job {job_id} complete: {width}x{height}")
 
             # ✅ Copy to output_dir if provided
             dest_dir = job.get("output_dir")
@@ -188,7 +195,6 @@ def run_worker():
             update_job_status(job_id, "failed",
                               end_time=datetime.utcnow().isoformat(),
                               error_message=str(e))
-
 
 init_db()
 print("✅ Job queue initialized.")
