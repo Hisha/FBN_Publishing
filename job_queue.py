@@ -188,6 +188,70 @@ def run_worker():
                 width = result.get("width")
                 height = result.get("height")
 
+                # ⬇️ NEW: enforce grayscale only for coloring jobs (not for covers)
+                mode = (result.get("mode") or "").lower()
+                # Treat either the job flag or the generator's returned mode as "cover"
+                is_cover = bool(job.get("cover_mode") or ((result.get("mode") or "").lower() == "cover"))
+
+                if ENFORCE_GRAYSCALE and not is_cover and mode == "coloring":
+                    attempts = 0
+                    if final_path and os.path.isfile(final_path) and _is_color_image(final_path):
+                        print(f"⚠️ Color detected in {final_path}. Beginning monochrome retries...")
+                    while final_path and os.path.isfile(final_path) and _is_color_image(final_path):
+                        attempts += 1
+                        if attempts > MAX_COLOR_RETRIES:
+                            raise ValueError(f"Color detected after {MAX_COLOR_RETRIES} retries")
+
+                        # Strengthen the prompt to force B/W line art
+                        base_prompt = job["prompt"]
+                        enforced_prompt = (
+                            f"{base_prompt}, black and white, pure line art, monochrome, high-contrast, "
+                            f"no color, no tint, white background"
+                        )
+
+                        # Rebuild the command with the same OUTPUT and stronger prompt
+                        cmd_retry = [
+                            PYTHON_BIN,
+                            RUN_FLUX_SCRIPT,
+                            "--prompt", enforced_prompt,
+                            "--output", f"{job_id}.png",
+                            "--output_dir", OUTPUT_DIR,
+                            "--steps", str(job["steps"]),
+                            "--guidance_scale", str(job["guidance_scale"])
+                        ]
+                        if job.get("autotune"):
+                            cmd_retry.append("--autotune")
+                        if job.get("adults"):
+                            cmd_retry.append("--adults")
+                        if job.get("cover_mode"):
+                            cmd_retry.append("--cover_mode")
+
+                        print(f"🔁 Retry {attempts}/{MAX_COLOR_RETRIES} with enforced monochrome...")
+
+                        # Run generator again (same filename)
+                        proc2 = subprocess.Popen(cmd_retry, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        stdout2, stderr2 = proc2.communicate()
+
+                        if proc2.returncode != 0:
+                            print(f"❌ Retry failed (code {proc2.returncode}). STDERR:\n{stderr2}")
+                            raise ValueError("Monochrome retry failed")
+
+                        # Parse new JSON
+                        json_match2 = re.search(r"\{.*\}", stdout2, re.DOTALL)
+                        if not json_match2:
+                            raise ValueError("Retry did not return JSON")
+
+                        result2 = json.loads(json_match2.group(0))
+                        if result2.get("error"):
+                            raise ValueError(f"Retry error: {result2['error']}")
+
+                        # Update final_path/width/height/upscaled to the retried output
+                        final_path = result2.get("file") or final_path
+                        upscaled   = result2.get("upscaled", upscaled)
+                        width      = result2.get("width") or width
+                        height     = result2.get("height") or height
+
+                        print(f"✅ Retry produced {final_path} ({width}x{height})")
             except Exception as e:
                 print(f"⚠️ JSON parse failed, falling back: {e}")
 
