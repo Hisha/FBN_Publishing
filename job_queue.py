@@ -20,6 +20,50 @@ OUTPUT_DIR = os.path.expanduser("~/FluxImages")
 PYTHON_BIN = "/home/smithkt/FBN_publishing/FBNP_env/bin/python"
 RUN_FLUX_SCRIPT = "/home/smithkt/FBN_publishing/run_flux.py"
 
+# ⬇️ NEW: grayscale guard configuration (env-tunable)
+ENFORCE_GRAYSCALE = os.getenv("ENFORCE_GRAYSCALE", "1") == "1"
+MAX_COLOR_RETRIES = int(os.getenv("MAX_COLOR_RETRIES", "2"))
+COLOR_SAT_THRESH = int(os.getenv("COLOR_SAT_THRESH", "18"))      # 0-255; ~18≈7% sat
+COLOR_FRACTION   = float(os.getenv("COLOR_FRACTION", "0.003"))    # 0.3% of pixels
+CROP_BORDER_PX   = int(os.getenv("COLOR_CROP_BORDER_PX", "4"))    # ignore thin borders
+
+def _is_color_image(path: str,
+                    sat_thresh: int = COLOR_SAT_THRESH,
+                    color_frac: float = COLOR_FRACTION,
+                    crop_border: int = CROP_BORDER_PX) -> bool:
+    """
+    Returns True if image has meaningful color content.
+    Heuristic: convert to HSV and measure fraction of pixels with saturation > threshold
+    and reasonable brightness. Works with Pillow only (no NumPy needed).
+    """
+    try:
+        with Image.open(path) as im:
+            im = im.convert("RGB")
+            # Optional: crop tiny borders where upscalers sometimes leave artifacts
+            if crop_border > 0:
+                w, h = im.size
+                if w > crop_border*2 and h > crop_border*2:
+                    im = im.crop((crop_border, crop_border, w - crop_border, h - crop_border))
+            hsv = im.convert("HSV")
+            h, s, v = hsv.split()
+            s_data = s.getdata()
+            v_data = v.getdata()
+
+            colored = 0
+            total = 0
+            # Ignore *very* dark pixels to reduce false positives
+            for sv, vv in zip(s_data, v_data):
+                total += 1
+                if sv > sat_thresh and vv > 32:   # vv>32 avoids near-black noise
+                    colored += 1
+            if total == 0:
+                return False
+            fraction = colored / total
+            return fraction > color_frac
+    except Exception as e:
+        # If detection fails, fail-safe to NOT blocking the image
+        print(f"⚠️ Color detection failed for {path}: {e}")
+        return False
 
 def add_job_to_db_and_queue(params):
     job_id = uuid.uuid4().hex[:8]
