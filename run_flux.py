@@ -20,6 +20,7 @@ INTERIOR_HEIGHT = 3300   # 11" * 300dpi
 # RealSR Model Path
 REALSR_MODEL_PATH = "/usr/local/bin/models/models-DF2K"
 
+
 def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
     """Calculate KDP cover wrap dimensions in pixels."""
     spine_in = round(page_count / 444, 3)  # spine thickness in inches
@@ -27,23 +28,6 @@ def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
     height_in = trim_height + (BLEED_INCH * 2)
     return int(width_in * DPI), int(height_in * DPI)
 
-def is_colored_image(image_path, threshold=1.0):
-    from PIL import Image
-    import numpy as np
-    try:
-        img = Image.open(image_path).convert("RGB")
-        arr = np.array(img)
-        non_gray_pixels = np.sum(
-            (arr[:, :, 0] != arr[:, :, 1]) |
-            (arr[:, :, 1] != arr[:, :, 2]) |
-            (arr[:, :, 0] != arr[:, :, 2])
-        )
-        total_pixels = arr.shape[0] * arr.shape[1]
-        percent_colored = (non_gray_pixels / total_pixels) * 100
-        return percent_colored > threshold
-    except Exception as e:
-        print(f"⚠️ Color check failed: {e}")
-        return False
 
 def upscale_image_multistep(input_path, output_path, final_width, final_height):
     try:
@@ -181,33 +165,15 @@ def main():
     print(f"⏳ Generating image for prompt: {full_prompt}")
 
     start = time.time()
-    max_attempts = 5
-    attempts = 0
-    while attempts < max_attempts:
-        print(f"🎨 Attempt {attempts + 1} to generate image...")
-        image = pipe(
-            prompt=full_prompt,
-            negative_prompt=args.negative_prompt,
-            num_inference_steps=args.steps,
-            guidance_scale=args.guidance_scale,
-            height=start_height,
-            width=start_width
-        ).images[0]
-        image.save(output_path)
-
-        if args.cover_mode:
-            break  # No color check needed
-        if not is_colored_image(output_path):
-            break  # Success!
-        
-        print("🚫 Color detected in non-cover image — retrying...")
-        os.remove(output_path)
-        attempts += 1
-
-    if attempts == max_attempts:
-        print("❌ Failed to generate B&W image after multiple attempts.")
-        exit(1)
-
+    image = pipe(
+        prompt=full_prompt,
+        negative_prompt=args.negative_prompt,
+        num_inference_steps=args.steps,
+        guidance_scale=args.guidance_scale,
+        height=start_height,
+        width=start_width
+    ).images[0]
+    image.save(output_path)
     end = time.time()
 
     # ✅ Upscale dynamically for covers
