@@ -28,6 +28,21 @@ def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
     height_in = trim_height + (BLEED_INCH * 2)
     return int(width_in * DPI), int(height_in * DPI)
 
+def is_colored_image(image_path, threshold=1.0):
+    try:
+        img = Image.open(image_path).convert("RGB")
+        arr = np.array(img)
+        non_gray_pixels = np.sum(
+            (arr[:, :, 0] != arr[:, :, 1]) |
+            (arr[:, :, 1] != arr[:, :, 2]) |
+            (arr[:, :, 0] != arr[:, :, 2])
+        )
+        total_pixels = arr.shape[0] * arr.shape[1]
+        percent_colored = (non_gray_pixels / total_pixels) * 100
+        return percent_colored > threshold
+    except Exception as e:
+        print(f"⚠️ Color check failed: {e}")
+        return False
 
 def upscale_image_multistep(input_path, output_path, final_width, final_height):
     try:
