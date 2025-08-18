@@ -16,6 +16,8 @@ from db import (
     delete_queued_jobs
 )
 
+ENV = os.environ.copy()
+ENV["PYTHONUNBUFFERED"] = "1"
 OUTPUT_DIR = os.path.expanduser("~/FluxImages")
 PYTHON_BIN = "/home/smithkt/FBN_publishing/FBNP_env/bin/python"
 RUN_FLUX_SCRIPT = "/home/smithkt/FBN_publishing/run_flux.py"
@@ -162,7 +164,13 @@ def run_worker():
             print(f"▶ Running command: {' '.join(cmd)}")
 
             # ✅ Run and capture JSON
-            process = subprocess.run(cmd, capture_output=True, text=True)
+            process = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,   # keep JSON
+                stderr=None,              # let human logs hit journal
+                text=True,
+                env=ENV,
+            )
             stdout, stderr = process.stdout.strip(), process.stderr.strip()
 
             if process.returncode != 0:
@@ -229,7 +237,13 @@ def run_worker():
                         print(f"🔁 Retry {attempts}/{MAX_COLOR_RETRIES} with enforced monochrome...")
 
                         # Run generator again (same filename)
-                        proc2 = subprocess.Popen(cmd_retry, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        proc2 = subprocess.Popen(
+                            cmd_retry,
+                            stdout=subprocess.PIPE,   # keep JSON
+                            stderr=None,              # let human logs hit journal
+                            text=True,
+                            env=ENV,
+                        )
                         stdout2, stderr2 = proc2.communicate()
 
                         if proc2.returncode != 0:
