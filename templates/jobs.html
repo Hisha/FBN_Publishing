@@ -10,6 +10,7 @@
   hx-post="{{ root_path }}/generate"
   hx-target="#job-container"
   hx-swap="none"
+  hx-on::before-request="window.normalizeHTMXParams(event)"
   hx-on::after-request="
     this.reset();
     htmx.trigger('#job-container', 'refresh');
@@ -117,5 +118,44 @@ document.getElementById('cover_mode').addEventListener('change', function() {
         pageCountInput.removeAttribute('required');
     }
 });
+
+(function () {
+  const cover = document.getElementById('cover_mode');
+  const page = document.getElementById('page_count');
+
+  function syncPageCount() {
+    if (cover.checked) {
+      page.disabled = false;
+      page.setAttribute('required', 'required');
+    } else {
+      page.removeAttribute('required');
+      page.value = '';
+      page.disabled = true; // <-- prevents submission
+    }
+  }
+
+  cover.addEventListener('change', syncPageCount);
+  // initialize on load
+  syncPageCount();
+})();
+
+window.normalizeHTMXParams = function (evt) {
+  const p = evt.detail.parameters;
+
+  // Drop empties so server doesn’t see "" for optional fields
+  ["filename","output_dir","seed","page_count"].forEach((k) => {
+    if (p[k] === "" || p[k] == null) delete p[k];
+  });
+
+  // Coerce numeric strings if present
+  if (p.steps != null && p.steps !== "") p.steps = parseInt(p.steps, 10);
+  if (p.guidance_scale != null && p.guidance_scale !== "") p.guidance_scale = parseFloat(p.guidance_scale);
+  if (p.seed != null && p.seed !== "") p.seed = parseInt(p.seed, 10);
+  if (p.page_count != null && p.page_count !== "") p.page_count = parseInt(p.page_count, 10);
+
+  // Normalize checkboxes (htmx omits unchecked; make explicit true/false)
+  p.adults = document.querySelector('input[name="adults"]').checked ? "true" : "false";
+  p.cover_mode = document.querySelector('input[name="cover_mode"]').checked ? "true" : "false";
+};
 </script>
 {% endblock %}
