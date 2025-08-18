@@ -5,6 +5,7 @@ import time
 import json
 import subprocess
 import shutil
+import sys
 from datetime import datetime
 from diffusers import DiffusionPipeline
 import multiprocessing
@@ -42,7 +43,7 @@ def upscale_image_multistep(input_path, output_path, final_width, final_height):
         if scale_factor > 1:
             steps.append(4)  # Force 4x because DF2K supports only 4x
 
-        print(f"✅ RealSR Upscale Plan: Steps={steps}, Target Scale≈{final_width / current_w:.2f}")
+        print(f"✅ RealSR Upscale Plan: Steps={steps}, Target Scale≈{final_width / current_w:.2f}", file=sys.stderr, flush=True)
 
         temp_input = input_path
         for i, s in enumerate(steps):
@@ -64,11 +65,11 @@ def upscale_image_multistep(input_path, output_path, final_width, final_height):
         img = Image.open(output_path)
         img = img.resize((final_width, final_height), Image.LANCZOS)
         img.save(output_path)
-        print(f"✅ Final image resized to exact: {final_width}x{final_height}")
+        print(f"✅ Final image resized to exact: {final_width}x{final_height}", file=sys.stderr, flush=True)
 
         return True
     except Exception as e:
-        print(f"⚠️ Multi-step upscale failed: {e}")
+        print(f"⚠️ Multi-step upscale failed: {e}", file=sys.stderr, flush=True)
         return False
 
 def main():
@@ -108,7 +109,7 @@ def main():
         logical_cores = multiprocessing.cpu_count()
         tuned_threads = max(4, int(logical_cores * 0.75))
         torch.set_num_threads(tuned_threads)
-        print(f"🧠 Auto-tuned threads: {tuned_threads}/{logical_cores}")
+        print(f"🧠 Auto-tuned threads: {tuned_threads}/{logical_cores}", file=sys.stderr, flush=True)
     else:
         torch.set_num_threads(args.threads)
 
@@ -123,7 +124,7 @@ def main():
         final_width, final_height = INTERIOR_WIDTH, INTERIOR_HEIGHT
         start_width, start_height = 848, 1088
 
-    print(f"📏 Final Size: {final_width}x{final_height}, Starting Size: {start_width}x{start_height}")
+    print(f"📏 Final Size: {final_width}x{final_height}, Starting Size: {start_width}x{start_height}", file=sys.stderr, flush=True)
 
     # ✅ Build prompt
     if args.cover_mode:
@@ -162,7 +163,7 @@ def main():
     pipe.to("cpu")
     pipe.enable_attention_slicing()
 
-    print(f"⏳ Generating image for prompt: {full_prompt}")
+    print(f"⏳ Generating image for prompt: {full_prompt}", file=sys.stderr, flush=True)
 
     start = time.time()
     image = pipe(
@@ -181,7 +182,7 @@ def main():
     upscaled_done = False
 
     if not args.no_upscale and final_width and final_height:
-        print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR (multi-step)...")
+        print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR (multi-step)...", file=sys.stderr, flush=True)
         if upscale_image_multistep(output_path, upscaled_path, final_width, final_height):
             try:
                 os.remove(output_path)
@@ -189,7 +190,7 @@ def main():
                 upscaled_done = True
                 final_output_path = output_path
             except Exception as e:
-                print(f"⚠️ Failed to replace original after upscale: {e}")
+                print(f"⚠️ Failed to replace original after upscale: {e}", file=sys.stderr, flush=True)
 
     # ✅ Build JSON result
     result = {
