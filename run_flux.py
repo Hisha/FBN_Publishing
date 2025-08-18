@@ -11,6 +11,7 @@ from diffusers import DiffusionPipeline
 import multiprocessing
 import re
 from PIL import Image
+import numpy as np
 
 # KDP Constants
 BLEED_INCH = 0.125
@@ -20,6 +21,58 @@ INTERIOR_HEIGHT = 3300   # 11" * 300dpi
 
 # RealSR Model Path
 REALSR_MODEL_PATH = "/usr/local/bin/models/models-DF2K"
+
+# -------- Color guard (runs BEFORE any upscale) --------
+# Less aggressive defaults; tunable via env if you want later (no flags needed)
+COLOR_CROP_BORDER_PX = int(os.getenv("COLOR_CROP_BORDER_PX", "8"))
+COLOR_Y_MIN = int(os.getenv("COLOR_Y_MIN", "32"))          # ignore very dark pixels
+COLOR_Y_MAX = int(os.getenv("COLOR_Y_MAX", "240"))         # ignore near-white pixels
+COLOR_DELTA_THRESH = int(os.getenv("COLOR_DELTA_THRESH", "36"))  # channel spread 0..255
+COLOR_FRACTION = float(os.getenv("COLOR_FRACTION", "0.01"))      # ≥1% midtones must be colored
+DEBUG_COLOR_GUARD = os.getenv("DEBUG_COLOR_GUARD", "0") == "1"
+
+def _is_color_pil(img: Image.Image) -> bool:
+    """
+    Return True if the image has meaningful color; False if it's monochrome enough.
+    Uses RGB "distance from gray" and ignores near-white/near-black + thin borders.
+    """
+    # Flatten RGBA onto white to avoid tinted edges from alpha
+    if img.mode == "RGBA":
+        bg = Image.new("RGB", img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[-1])
+        img = bg
+    else:
+        img = img.convert("RGB")
+
+    w, h = img.size
+    c = COLOR_CROP_BORDER_PX
+    if c and w > 2*c and h > 2*c:
+        img = img.crop((c, c, w - c, h - c))
+
+    arr = np.asarray(img, dtype=np.int16)
+    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+
+    # Luma (BT.601)
+    y = (299*r + 587*g + 114*b) // 1000
+    mid = (y > COLOR_Y_MIN) & (y < COLOR_Y_MAX)
+    total = int(mid.sum())
+    if total == 0:
+        if DEBUG_COLOR_GUARD:
+            print("🔧 ColorGuard: no midtone pixels → MONO", file=sys.stderr, flush=True)
+        return False
+
+    delta = np.maximum.reduce([np.abs(r-g), np.abs(g-b), np.abs(r-b)])
+    colored = int(((delta > COLOR_DELTA_THRESH) & mid).sum())
+    frac = colored / total
+
+    if DEBUG_COLOR_GUARD:
+        print(
+            f"🔧 ColorGuard: delta>{COLOR_DELTA_THRESH}, frac>{COLOR_FRACTION} "
+            f"→ colored={colored}/{total} ({frac:.5f})",
+            file=sys.stderr, flush=True
+        )
+    return frac > COLOR_FRACTION
+# ------------------------------------------------------
 
 
 def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
@@ -41,9 +94,12 @@ def upscale_image_multistep(input_path, output_path, final_width, final_height):
             steps.append(4)
             scale_factor /= 4
         if scale_factor > 1:
-            steps.append(4)  # Force 4x because DF2K supports only 4x
+            steps.append(4)  # DF2K supports only 4x
 
-        print(f"✅ RealSR Upscale Plan: Steps={steps}, Target Scale≈{final_width / current_w:.2f}", file=sys.stderr, flush=True)
+        print(
+            f"✅ RealSR Upscale Plan: Steps={steps}, Target Scale≈{final_width / current_w:.2f}",
+            file=sys.stderr, flush=True
+        )
 
         temp_input = input_path
         for i, s in enumerate(steps):
@@ -71,6 +127,7 @@ def upscale_image_multistep(input_path, output_path, final_width, final_height):
     except Exception as e:
         print(f"⚠️ Multi-step upscale failed: {e}", file=sys.stderr, flush=True)
         return False
+
 
 def main():
     parser = argparse.ArgumentParser(description="FBN Publishing Image Generator (Flux Schnell + RealSR)")
@@ -174,10 +231,20 @@ def main():
         height=start_height,
         width=start_width
     ).images[0]
+
+    # ✅ COLOR GUARD (only for interior/line-art mode). Run BEFORE any upscale.
+    if not args.cover_mode:
+        if _is_color_pil(image):
+            print("⚠️ Base render shows color tint; forcing grayscale before upscale", file=sys.stderr, flush=True)
+            image = image.convert("L").convert("RGB")
+        else:
+            print("✅ Base render passes color guard", file=sys.stderr, flush=True)
+
+    # Save the (possibly de-tinted) base image
     image.save(output_path)
     end = time.time()
 
-    # ✅ Upscale dynamically for covers
+    # ✅ Upscale dynamically (covers & interiors)
     final_output_path = output_path
     upscaled_done = False
 
