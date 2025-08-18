@@ -171,12 +171,14 @@ def run_worker():
                 text=True,
                 env=ENV,
             )
-            stdout, stderr = process.stdout.strip(), process.stderr.strip()
+            stdout = (process.stdout or "").strip()
+            stderr_text = ""  # not captured (in journal)
 
             if process.returncode != 0:
-                update_job_status(job_id, "failed", end_time=datetime.utcnow().isoformat(),
-                                  error_message=stderr or "Unknown error")
-                print(f"❌ Process failed: {stderr}")
+                update_job_status(job_id, "failed",
+                                  end_time=datetime.utcnow().isoformat(),
+                                  error_message="Generator failed (see journal for stderr)")
+                print("❌ Process failed. See service journal for stderr.")
                 continue
 
             # ✅ Parse JSON output from run_flux.py
@@ -244,10 +246,10 @@ def run_worker():
                             text=True,
                             env=ENV,
                         )
-                        stdout2, stderr2 = proc2.communicate()
+                        stdout2, _ = proc2.communicate()
 
                         if proc2.returncode != 0:
-                            print(f"❌ Retry failed (code {proc2.returncode}). STDERR:\n{stderr2}")
+                            print(f"❌ Retry failed (code {proc2.returncode}). See journal for details.")
                             raise ValueError("Monochrome retry failed")
 
                         # Parse new JSON
