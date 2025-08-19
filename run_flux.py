@@ -10,7 +10,7 @@ from datetime import datetime
 from diffusers import DiffusionPipeline
 import multiprocessing
 import re
-from PIL import Image
+from PIL import Image, ImageDraw
 import numpy as np
 
 # KDP Constants
@@ -73,6 +73,27 @@ def _is_color_pil(img: Image.Image) -> bool:
         )
     return frac > COLOR_FRACTION
 # ------------------------------------------------------
+
+# --------- Watermark scrub (small corner boxes; interiors only) ---------
+SCRUB_WATERMARK = os.getenv("SCRUB_WATERMARK", "1") == "1"
+WATERMARK_W = int(os.getenv("WATERMARK_W", "420"))   # ~1.4" at 300dpi
+WATERMARK_H = int(os.getenv("WATERMARK_H", "160"))   # ~0.53"
+
+def _scrub_watermark_corners(path: str):
+    if not SCRUB_WATERMARK:
+        return
+    try:
+        im = Image.open(path).convert("RGB")
+        w, h = im.size
+        d = ImageDraw.Draw(im)
+        # bottom-right and bottom-left (most common)
+        d.rectangle([w - WATERMARK_W, h - WATERMARK_H, w, h], fill=(255, 255, 255))
+        d.rectangle([0, h - WATERMARK_H, WATERMARK_W, h], fill=(255, 255, 255))
+        im.save(path)
+        print("🧽 Watermark corners scrubbed", file=sys.stderr, flush=True)
+    except Exception as e:
+        print(f"⚠️ Watermark scrub failed: {e}", file=sys.stderr, flush=True)
+# ------------------------------------------------------------------------
 
 
 def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
@@ -191,7 +212,7 @@ def main():
             "hand-colored crayon and colored pencil style, visible wax texture, uneven coloring, "
             "soft artistic feel, vibrant but not overly saturated colors"
         )
-        args.negative_prompt += ", photorealistic, realistic, hyper-realistic, CGI"
+        args.negative_prompt += ", photorealistic, realistic, hyper-realistic, CGI, logo, signature, caption, url, website, letters, typography"
     else:
         base_template = (
             "black and white line art, clean bold outlines, highly detailed, "
@@ -200,7 +221,7 @@ def main():
         )
         detail_tag = ", for adults, very intricate design" if args.adults else ", for kids, simple and fun"
         full_prompt = f"{args.prompt}, {base_template}{detail_tag}"
-        args.negative_prompt += ", color, colored, gradients"
+        args.negative_prompt += ", color, colored, gradients, logo, signature, caption, url, website, letters, typography"
 
     # ✅ Seed
     if args.seed is not None:
@@ -258,6 +279,16 @@ def main():
                 final_output_path = output_path
             except Exception as e:
                 print(f"⚠️ Failed to replace original after upscale: {e}", file=sys.stderr, flush=True)
+
+    # ✅ Final enforcement/scrub for interiors (AFTER final save path is set)
+    if not args.cover_mode:
+        try:
+            im_final = Image.open(final_output_path).convert("L").convert("RGB")
+            im_final.save(final_output_path)
+            print("✅ Final grayscale enforced", file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"⚠️ Final grayscale enforcement failed: {e}", file=sys.stderr, flush=True)
+        _scrub_watermark_corners(final_output_path)
 
     # ✅ Build JSON result
     result = {
