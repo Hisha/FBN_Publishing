@@ -10,10 +10,12 @@ from datetime import datetime
 from diffusers import DiffusionPipeline
 import multiprocessing
 import re
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 import numpy as np
 
-# KDP Constants
+# =========================
+# KDP & Layout Constants
+# =========================
 BLEED_INCH = 0.125
 DPI = 300
 INTERIOR_WIDTH = 2550    # 8.5" * 300dpi
@@ -22,21 +24,28 @@ INTERIOR_HEIGHT = 3300   # 11" * 300dpi
 # RealSR Model Path
 REALSR_MODEL_PATH = "/usr/local/bin/models/models-DF2K"
 
-# -------- Color guard (runs BEFORE any upscale) --------
-# Less aggressive defaults; tunable via env if you want later (no flags needed)
+# =========================
+# Color Guard (pre-processing)
+# =========================
 COLOR_CROP_BORDER_PX = int(os.getenv("COLOR_CROP_BORDER_PX", "8"))
-COLOR_Y_MIN = int(os.getenv("COLOR_Y_MIN", "32"))          # ignore very dark pixels
-COLOR_Y_MAX = int(os.getenv("COLOR_Y_MAX", "240"))         # ignore near-white pixels
-COLOR_DELTA_THRESH = int(os.getenv("COLOR_DELTA_THRESH", "36"))  # channel spread 0..255
-COLOR_FRACTION = float(os.getenv("COLOR_FRACTION", "0.01"))      # ≥1% midtones must be colored
+COLOR_Y_MIN = int(os.getenv("COLOR_Y_MIN", "32"))
+COLOR_Y_MAX = int(os.getenv("COLOR_Y_MAX", "240"))
+COLOR_DELTA_THRESH = int(os.getenv("COLOR_DELTA_THRESH", "36"))
+COLOR_FRACTION = float(os.getenv("COLOR_FRACTION", "0.01"))
 DEBUG_COLOR_GUARD = os.getenv("DEBUG_COLOR_GUARD", "0") == "1"
 
+BIN_THRESH = int(os.getenv("BIN_THRESH", "200"))    # 0..255; higher => fewer grays become black
+THICKEN_SIZE = int(os.getenv("THICKEN_SIZE", "3"))  # 1/3/5... MaxFilter kernel size
+
+SCRUB_WATERMARK = os.getenv("SCRUB_WATERMARK", "1") == "1"
+WATERMARK_W = int(os.getenv("WATERMARK_W", "420"))   # ~1.4" at 300dpi
+WATERMARK_H = int(os.getenv("WATERMARK_H", "160"))   # ~0.53"
+
+# =========================
+# Utilities
+# =========================
 def _is_color_pil(img: Image.Image) -> bool:
-    """
-    Return True if the image has meaningful color; False if it's monochrome enough.
-    Uses RGB "distance from gray" and ignores near-white/near-black + thin borders.
-    """
-    # Flatten RGBA onto white to avoid tinted edges from alpha
+    """Return True if the image has meaningful color; False if it's monochrome enough."""
     if img.mode == "RGBA":
         bg = Image.new("RGB", img.size, (255, 255, 255))
         bg.paste(img, mask=img.split()[-1])
@@ -67,17 +76,11 @@ def _is_color_pil(img: Image.Image) -> bool:
 
     if DEBUG_COLOR_GUARD:
         print(
-            f"🔧 ColorGuard: delta>{COLOR_DELTA_THRESH}, frac>{COLOR_FRACTION} "
-            f"→ colored={colored}/{total} ({frac:.5f})",
+            f"🔧 ColorGuard: delta>{COLOR_DELTA_THRESH}, frac>{COLOR_FRACTION} → colored={colored}/{total} ({frac:.5f})",
             file=sys.stderr, flush=True
         )
     return frac > COLOR_FRACTION
-# ------------------------------------------------------
 
-# --------- Watermark scrub (small corner boxes; interiors only) ---------
-SCRUB_WATERMARK = os.getenv("SCRUB_WATERMARK", "1") == "1"
-WATERMARK_W = int(os.getenv("WATERMARK_W", "420"))   # ~1.4" at 300dpi
-WATERMARK_H = int(os.getenv("WATERMARK_H", "160"))   # ~0.53"
 
 def _scrub_watermark_corners(path: str):
     if not SCRUB_WATERMARK:
@@ -93,17 +96,35 @@ def _scrub_watermark_corners(path: str):
         print("🧽 Watermark corners scrubbed", file=sys.stderr, flush=True)
     except Exception as e:
         print(f"⚠️ Watermark scrub failed: {e}", file=sys.stderr, flush=True)
-# ------------------------------------------------------------------------
 
 
+def binarize_and_thicken(pil_img: Image.Image) -> Image.Image:
+    """Convert to clean black/white line art and thicken lines."""
+    g = ImageOps.autocontrast(pil_img.convert("L"))
+    bw = g.point(lambda v: 0 if v < BIN_THRESH else 255, mode="1").convert("L")
+    if THICKEN_SIZE >= 3 and THICKEN_SIZE % 2 == 1:
+        bw = bw.filter(ImageFilter.MaxFilter(THICKEN_SIZE))
+    bw = bw.filter(ImageFilter.MinFilter(3))
+    return bw.convert("RGB")
+
+
+def resize_to_exact_lineart(img: Image.Image, w: int, h: int) -> Image.Image:
+    r = img.resize((w, h), Image.LANCZOS)
+    return binarize_and_thicken(r)
+
+# =========================
+# Cover dimension calc
+# =========================
 def calculate_cover_dimensions(page_count, trim_width=8.5, trim_height=11):
     """Calculate KDP cover wrap dimensions in pixels."""
-    spine_in = round(page_count / 444, 3)  # spine thickness in inches
+    spine_in = round(page_count / 444, 3)  # KDP spine thickness approximation
     width_in = (trim_width * 2) + spine_in + (BLEED_INCH * 2)
     height_in = trim_height + (BLEED_INCH * 2)
     return int(width_in * DPI), int(height_in * DPI)
 
-
+# =========================
+# RealSR upscale (covers only)
+# =========================
 def upscale_image_multistep(input_path, output_path, final_width, final_height):
     try:
         img = Image.open(input_path)
@@ -138,7 +159,7 @@ def upscale_image_multistep(input_path, output_path, final_width, final_height):
                 os.remove(temp_input)
             temp_input = temp_output
 
-        # ✅ After RealSR, force resize to exact final dimensions
+        # Force resize to exact final dimensions
         img = Image.open(output_path)
         img = img.resize((final_width, final_height), Image.LANCZOS)
         img.save(output_path)
@@ -149,16 +170,18 @@ def upscale_image_multistep(input_path, output_path, final_width, final_height):
         print(f"⚠️ Multi-step upscale failed: {e}", file=sys.stderr, flush=True)
         return False
 
-
+# =========================
+# Main
+# =========================
 def main():
-    parser = argparse.ArgumentParser(description="FBN Publishing Image Generator (Flux Schnell + RealSR)")
+    parser = argparse.ArgumentParser(description="FBN Publishing Image Generator (Flux Schnell; RealSR for covers only)")
 
     # Core options
     parser.add_argument("--prompt", type=str, required=True)
     parser.add_argument("--negative_prompt", type=str,
                         default="blur, background clutter, text, watermark, trademarked, copyrighted")
-    parser.add_argument("--steps", type=int, default=6)
-    parser.add_argument("--guidance_scale", type=float, default=4.5)
+    parser.add_argument("--steps", type=int, default=12)
+    parser.add_argument("--guidance_scale", type=float, default=3.5)
 
     # Cover mode
     parser.add_argument("--page_count", type=int, default=None, help="Total pages for cover size calculation")
@@ -177,12 +200,9 @@ def main():
     parser.add_argument("--adults", action="store_true")
     parser.add_argument("--cover_mode", action="store_true")
 
-    # Upscale toggle
-    parser.add_argument("--no-upscale", action="store_true")
-
     args = parser.parse_args()
 
-    # ✅ Thread tuning
+    # Thread tuning
     if args.autotune:
         logical_cores = multiprocessing.cpu_count()
         tuned_threads = max(4, int(logical_cores * 0.75))
@@ -191,7 +211,7 @@ def main():
     else:
         torch.set_num_threads(args.threads)
 
-    # ✅ Set final and starting dimensions automatically
+    # Final / starting dimensions
     if args.cover_mode:
         if not args.page_count:
             raise ValueError("--page_count is required for cover_mode")
@@ -204,7 +224,20 @@ def main():
 
     print(f"📏 Final Size: {final_width}x{final_height}, Starting Size: {start_width}x{start_height}", file=sys.stderr, flush=True)
 
-    # ✅ Build prompt
+    # =========================
+    # Build prompt
+    # =========================
+    # Neutral base template (works for both kids and adults)
+    base_template_kids = (
+        "black and white line art, vector-like, bold thick outlines (4-6 px at 300 dpi), "
+        "minimal interior lines, large simple shapes, flat white background, single scene, centered composition, "
+        "no text or numbers, simple and fun, ages 4-8"
+    )
+    base_template_adult = (
+        "black and white line art, vector-like, bold outlines, high line density, complex symmetrical pattern, "
+        "intricate ornamental motifs, flat white background, single scene, centered composition, no text or numbers"
+    )
+
     if args.cover_mode:
         full_prompt = (
             f"{args.prompt}, full wraparound book cover layout, "
@@ -212,22 +245,25 @@ def main():
             "hand-colored crayon and colored pencil style, visible wax texture, uneven coloring, "
             "soft artistic feel, vibrant but not overly saturated colors"
         )
-        args.negative_prompt += ", photorealistic, realistic, hyper-realistic, CGI, logo, signature, caption, url, website, letters, typography"
-    else:
-        base_template = (
-            "black and white line art, clean bold outlines, highly detailed, "
-            "no shading, no gradients, no color, coloring book illustration, "
-            "plain white background, high contrast, ink drawing style"
+        args.negative_prompt += (
+            ", photorealistic, realistic, hyper-realistic, CGI, logo, signature, caption, url, "
+            "website, letters, typography"
         )
-        detail_tag = ", for adults, very intricate design" if args.adults else ", for kids, simple and fun"
-        full_prompt = f"{args.prompt}, {base_template}{detail_tag}"
-        args.negative_prompt += ", color, colored, gradients, logo, signature, caption, url, website, letters, typography"
+    else:
+        style = base_template_adult if args.adults else base_template_kids
+        full_prompt = f"{args.prompt}, {style}"
+        args.negative_prompt += (
+            ", color, colored, gradients, grayscale tones, grey wash, texture, noise, "
+            "crosshatching, hatching, stippling, halftone, shading, drop shadow, glow, "
+            "3d lighting, airbrush, sketchy lines, pencil shading, graphite, charcoal, "
+            "background clutter, logo, watermark, signature, caption, url, website, letters, typography"
+        )
 
-    # ✅ Seed
+    # Seed
     if args.seed is not None:
         torch.manual_seed(args.seed)
 
-    # ✅ Output paths
+    # Output paths
     output_dir = os.path.expanduser(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -236,7 +272,7 @@ def main():
     output_path = os.path.join(output_dir, base_filename)
     upscaled_path = output_path.replace(".png", "_upscaled.png")
 
-    # ✅ Load model
+    # Load model
     pipe = DiffusionPipeline.from_pretrained(args.model_path, torch_dtype=torch.float32, use_safetensors=True)
     pipe.to("cpu")
     pipe.enable_attention_slicing()
@@ -253,44 +289,55 @@ def main():
         width=start_width
     ).images[0]
 
-    # ✅ COLOR GUARD (only for interior/line-art mode). Run BEFORE any upscale.
+    # COLOR GUARD (interiors only). Run BEFORE any upscale.
     if not args.cover_mode:
         if _is_color_pil(image):
-            print("⚠️ Base render shows color tint; forcing grayscale before upscale", file=sys.stderr, flush=True)
+            print("⚠️ Base render shows color tint; forcing grayscale", file=sys.stderr, flush=True)
             image = image.convert("L").convert("RGB")
         else:
             print("✅ Base render passes color guard", file=sys.stderr, flush=True)
 
-    # Save the (possibly de-tinted) base image
+    # Save the base image
     image.save(output_path)
     end = time.time()
 
-    # ✅ Upscale dynamically (covers & interiors)
+    # =========================
+    # Upscale / finalize
+    # =========================
     final_output_path = output_path
     upscaled_done = False
 
-    if not args.no_upscale and final_width and final_height:
-        print(f"🔍 Upscaling to {final_width}×{final_height} using RealSR (multi-step)...", file=sys.stderr, flush=True)
-        if upscale_image_multistep(output_path, upscaled_path, final_width, final_height):
-            try:
-                os.remove(output_path)
-                shutil.move(upscaled_path, output_path)
-                upscaled_done = True
-                final_output_path = output_path
-            except Exception as e:
-                print(f"⚠️ Failed to replace original after upscale: {e}", file=sys.stderr, flush=True)
-
-    # ✅ Final enforcement/scrub for interiors (AFTER final save path is set)
-    if not args.cover_mode:
+    if args.cover_mode:
+        # Covers: Use RealSR, then exact resize
+        if final_width and final_height:
+            print(f"🔍 Upscaling cover to {final_width}×{final_height} using RealSR (multi-step)...", file=sys.stderr, flush=True)
+            if upscale_image_multistep(output_path, upscaled_path, final_width, final_height):
+                try:
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+                    shutil.move(upscaled_path, output_path)
+                    upscaled_done = True
+                    final_output_path = output_path
+                except Exception as e:
+                    print(f"⚠️ Cover: failed to replace original after upscale: {e}", file=sys.stderr, flush=True)
+            else:
+                # Fallback to Pillow resize
+                im_final = image.resize((final_width, final_height), Image.LANCZOS)
+                im_final.save(final_output_path)
+                print("ℹ️ RealSR failed; used Pillow resize for cover", file=sys.stderr, flush=True)
+    else:
+        # Interiors: Exact resize + binarize (best for crisp line art)
         try:
-            im_final = Image.open(final_output_path).convert("L").convert("RGB")
+            im_final = resize_to_exact_lineart(image, final_width, final_height)
             im_final.save(final_output_path)
-            print("✅ Final grayscale enforced", file=sys.stderr, flush=True)
+            print("✅ Interior exact resize + binarize complete", file=sys.stderr, flush=True)
         except Exception as e:
-            print(f"⚠️ Final grayscale enforcement failed: {e}", file=sys.stderr, flush=True)
+            print(f"⚠️ Interior resize+binarize failed: {e}", file=sys.stderr, flush=True)
         _scrub_watermark_corners(final_output_path)
 
-    # ✅ Build JSON result
+    # =========================
+    # JSON result
+    # =========================
     result = {
         "status": "success",
         "file": final_output_path,
@@ -302,7 +349,7 @@ def main():
         "height": final_height,
         "width": final_width,
         "upscaled": upscaled_done,
-        "mode": "cover" if args.cover_mode else "coloring",
+        "mode": "cover" if args.cover_mode else ("adult" if args.adults else "kids"),
         "time_sec": round(end - start, 2)
     }
 
